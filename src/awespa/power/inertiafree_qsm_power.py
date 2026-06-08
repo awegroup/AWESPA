@@ -114,7 +114,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
 
     def compute_power_curves(
         self,
-        method: str = "direct",
+        method: str = "optimization",
         wind_speeds: Optional[np.ndarray] = None,
         cluster_ids: Optional[List[int]] = None,
         output_path: Path = None,
@@ -129,7 +129,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
             output_path (Path): Path where power curve YAML will be written.
                 If None, no export is performed. Defaults to None.
             method (str): Simulation method, either ``'direct'`` or
-                ``'optimization'``. Defaults to ``'direct'``.
+                ``'optimization'``. Defaults to ``'optimization'``.
             wind_speeds (np.ndarray): Custom wind speeds to evaluate [m/s].
                 If None, uses wind speeds from simulation settings.
                 Defaults to None.
