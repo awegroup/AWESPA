@@ -89,9 +89,9 @@ dependencies = [
   "scikit-learn",
   "xarray",
   "netCDF4",
-  "inertiafree-qsm @ git+https://github.com/jbredael/InertiaFree-QSM.git@6fc1f34",
-  "power-luchsinger @ git+https://github.com/jbredael/LuchsingerPowerModel.git@2534a9c",
-  "wind-profile-clustering @ git+https://github.com/awegroup/wind-profile-clustering.git@22f0899",
+  "inertiafree-qsm @ git+https://github.com/jbredael/InertiaFree-QSM.git@d4bee32",
+  "power-luchsinger @ git+https://github.com/jbredael/LuchsingerPowerModel.git@4c59089",
+  "wind-profile-clustering @ git+https://github.com/awegroup/wind-profile-clustering.git@33ea7b0",
   "awesio @ git+https://github.com/awegroup/awesIO.git"
 ]
 
