@@ -13,7 +13,7 @@ aerodynamics: # TU Delft V3
 # ============================================================================
 # OPTIMIZATION SETTINGS
 # ============================================================================
-# Settings for the optimization-based power curve generation
+# Settings for power curve generation
 # This method is slower but finds optimal cycle parameters for each wind speed
 
 optimization:
