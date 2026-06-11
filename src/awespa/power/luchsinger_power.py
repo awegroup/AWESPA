@@ -30,7 +30,7 @@ class LuchsingerPowerModel(PowerEstimationModel):
     awesIO format:
 
     - System configuration (kite, tether, ground station properties)
-    - Wind resource (altitude profiles, clusters, probability matrix)
+    - Wind resource (profiles, probability matrix)
     - Simulation settings (operational envelope, atmosphere parameters)
     """
 
@@ -62,7 +62,7 @@ class LuchsingerPowerModel(PowerEstimationModel):
             operational_constraints_path (Path): Not used by this model.
                 Defaults to None.
             wind_resource_path (Path): Path to wind resource YAML file
-                containing altitude profiles, clusters, and probability matrix.
+                containing profiles and probability matrix.
             validate (bool): If True, validate configuration files using
                 the awesIO validator. Defaults to True.
 
@@ -111,8 +111,8 @@ class LuchsingerPowerModel(PowerEstimationModel):
         print(f"  Cut-in wind speed:      {self.model.cutInWindSpeed:.1f} m/s")
         print(f"  Cut-out wind speed:     {self.model.cutOutWindSpeed:.1f} m/s")
         print(
-            f"  Number of wind clusters:"
-            f" {self.model.wind_resource['n_clusters']}"
+            f"  Number of wind profiles:"
+            f" {self.model.wind_resource['n_profiles']}"
         )
 
     def compute_power_curves(
@@ -155,8 +155,8 @@ class LuchsingerPowerModel(PowerEstimationModel):
                 "Power model not initialized. Call load_configuration first."
             )
 
-        nClusters = self.model.wind_resource["n_clusters"]
-        print(f"Computing Luchsinger power curves ({nClusters} wind profile(s))...")
+        nprofiles = self.model.wind_resource["n_profiles"]
+        print(f"Computing Luchsinger power curves ({nprofiles} wind profile(s))...")
 
         data = self.model.generate_power_curves(
             wind_speeds=wind_speeds,
@@ -182,7 +182,7 @@ class LuchsingerPowerModel(PowerEstimationModel):
     ) -> float:
         """Calculate power output at a single wind speed.
 
-        Uses the selected wind cluster profile to derive the wind shear
+        Uses the selected wind profile to derive the wind shear
         and calls the Luchsinger model for a single operating point.
 
         Args:
