@@ -169,7 +169,7 @@ wind_model.cluster(
 # --- Step 2: Power curve generation ---
 power_model = LuchsingerPowerModel()
 power_model.load_configuration(
-    system_path=CONFIG / "kitepower V3_20.yml",
+    system_path=CONFIG / "tudelft V3_25.yml",
     simulation_settings_path=CONFIG / "luchsinger_settings.yml",
     wind_resource_path=RESULTS / "wind_resource.yml",
 )
@@ -188,7 +188,7 @@ aep_results = calculate_aep(
     plot=True,
     plot_output_dir=RESULTS / "plots",
 )
-print(f"AEP: {aep_results['aep_MWh']:.1f} MWh/year")
+print("aep_results['total_aep']")
 ```
 
 ## Configuration files
@@ -198,9 +198,9 @@ Each step is controlled by one or more YAML files. Example files are provided in
 | File | Used by | Purpose |
 |------|---------|---------|
 | `wind_clustering_settings.yml` | Wind module | Clustering parameters, data source, location |
-| `kitepower V3_20.yml` | Power module | System parameters (wing, tether, ground station) in awesIO format |
+| `tudelft V3_25.yml` | Power module | System parameters (wing, tether, ground station) in awesIO format |
 | `luchsinger_settings.yml` | Power module | Luchsinger simulation settings |
-| `intertiafree-qsm_settings.yml` | Power module | Inertia-Free QSM simulation settings |
+| `inertiafree-qsm_settings.yml` | Power module | Inertia-Free QSM simulation settings |
 | `wind_resource.yml` | Power module, Pipeline | Output of the wind module; wind profiles and probability matrix |
 
 ## Testing
