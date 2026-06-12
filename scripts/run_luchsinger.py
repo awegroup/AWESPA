@@ -22,7 +22,7 @@ def main():
     """Run Luchsinger model and export power curves."""
     # ---- paths -----------------------------------------------    ------------
     configDir = PROJECT_ROOT / "config"
-    systemPath = configDir / "example" / "kitepower V3_20.yml"
+    systemPath = configDir / "example" / "tudelft V3_25.yml"
     simulationSettingsPath = configDir /"example" / "luchsinger_settings.yml"
     windResourcePath = configDir / "example" / "wind_resource.yml"
 
@@ -41,7 +41,7 @@ def main():
 
     # ---- single wind speed test ------------------------------------------
     print("\n" + "=" * 60)
-    print("SINGLE WIND SPEED TEST (cluster 1)")
+    print("SINGLE WIND SPEED TEST (profile 1)")
     print("=" * 60)
     power = model.calculate_power_at_wind_speed(
         wind_speed=10.0,

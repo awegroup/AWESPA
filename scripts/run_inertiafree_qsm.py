@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the Inertia-Free QSM power model via the AWESPA wrapper.
 
-Demonstrates both direct simulation and single-wind-speed calculation
+Demonstrates direct single-wind-speed calculation and power curve generation
 using the InertiaFreeQSMPowerModel wrapper class.
 
 Usage:
@@ -22,13 +22,13 @@ def main():
     """Run InertiaFree-QSM model and export power curves."""
     # ---- paths -----------------------------------------------------------
     configDir = PROJECT_ROOT / "config" / "example"
-    systemPath = configDir / "kitepower V3_20.yml"
-    simulationSettingsPath = configDir / "intertiafree-qsm_settings.yml"
+    systemPath = configDir / "tudelft V3_25.yml"
+    simulationSettingsPath = configDir / "inertiafree-qsm_settings.yml"
     windResourcePath = configDir / "wind_resource.yml"
 
     resultsDir = PROJECT_ROOT / "results"
     resultsDir.mkdir(parents=True, exist_ok=True)
-    outputDirect = resultsDir / "power_curves_direct_simulation.yml"
+    outputPath = resultsDir / "power_curves.yml"
 
     # ---- initialise and load model ---------------------------------------
     model = InertiaFreeQSMPowerModel()
@@ -43,15 +43,14 @@ def main():
     power = model.calculate_power_at_wind_speed(
         wind_speed=10.0,
         method="direct",
-        cluster_id=1,
+        profile_id=1,
         verbose=True,
     )
 
     # ---- full power curve ----------------------------
     data = model.compute_power_curves(
-        cluster_ids=[1],
-        output_path=outputDirect,
-        method="optimization",
+        profile_ids=[1],
+        output_path=outputPath,
         verbose=True,
         showplot=True,
         saveplot=True,
@@ -61,7 +60,7 @@ def main():
     print("\n" + "=" * 60)
     print("POWER CURVE GENERATION COMPLETE")
     print("=" * 60)
-    print(f"\n  Direct simulation output: {outputDirect}")
+    print(f"\n  Power curve output: {outputPath}")
     print("\nAll done!")
 
 

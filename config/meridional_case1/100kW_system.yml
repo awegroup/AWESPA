@@ -1,6 +1,6 @@
 metadata:
-  name: Kitepower V3.20
-  description: Config for the Kitepower V3.20 soft kite pumping ground gen system
+  name: 100 kW Meridional system
+  description: Config for the 100 kW Meridional system
   note: None
   awesIO_version: 0.1.0
   schema: system_schema.yml
@@ -9,54 +9,48 @@ assembly:
   generation_type: pumping_ground_gen
 components:
   wing:
-    name: Kitepower V3.20
+    name: V11.100
     type: LEI_soft_kite
     version: 1.0
     structure:
-      projected_surface_area: 19.75 # m2
-      mass: 22.8 # kg, all mass lumped in the wing for simplicity
+      projected_surface_area: 140.00 # m2
+      mass: 47 # kg, all mass of wing and bridle lumped together
   bridle:
-    name: Kitepower V3.20 Bridle
+    name: V11.100 Bridle
     type: LEI_soft_kite_bridle 
     version: 1.0
     structure:
       mass: 0
   control_system:
-    name: Kitepower V3.20 KCU
+    name: 100 kW Meridional system KCU
     type: kite_control_unit
     version: 1.0
     structure:
-      mass: 0
+      mass: 20.0
   tether:
-    name: Kitepower V3.20
+    name: 100 kW Meridional system Tether
     type: non_conductive_tether
     version: 1.0
     structure:
       length: 600
-      diameter: 0.006
+      diameter: 0.012
       density: 724.0
-      max_tether_force: 8200.0 # N
+      max_tether_force: 60000.0 # N
       conductive: false
-      material:
-        type: dyneema
-        youngs_modulus: 0.85e9 # Pa
   ground_station:
-    name: example_pumping_ground_gen_station
+    name: 100 kW Meridional system Ground Station
     type: pumping_ground_gen_station
     version: 1.0
     structure:
       mass: 0.0
     drum:
       type: electric_winch
-      max_tether_speed: 10.0
+      max_tether_speed: 15.0
     generator:
       type: permanent_magnet_synchronous
-      max_power: 40000.0 # W
-      efficiency: 1
+      max_power: 180000.0 # W
+      generator_efficiency: 0.9
+      motor_efficiency: 0.9
     storage:
       type: battery_bank
-      capacity: 100000.0 # Wh
-      max_charge_rate: 50000.0 # W
-      max_discharge_rate: 50000.0 # W
-      efficiency: 1
-      state_of_charge_initial: 0.5
+      efficiency: 0.95

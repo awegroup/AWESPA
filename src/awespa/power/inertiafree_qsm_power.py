@@ -2,8 +2,8 @@
 
 This wrapper adapts the Inertia-Free Quasi-Steady Model to the AWESPA
 modular architecture. The underlying model accepts awesIO format configuration
-files directly and supports both direct simulation and optimization-based power
-curve generation."""
+files directly and supports power curve generation, while single-wind-speed
+simulations can be either direct or optimized."""
 
 import numpy as np
 from pathlib import Path
@@ -27,14 +27,13 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
     """Wrapper for the Inertia-Free Quasi-Steady Model power curve constructor.
 
     This wrapper adapts the vendored InertiaFree-QSM to the AWESPA modular
-    architecture. It supports two power curve generation methods:
-
-    1. Direct simulation: Fast, uses pre-defined cycle parameters.
-    2. Optimization: Slower, finds optimal cycle parameters per wind speed.
+    architecture. Power curves are generated from optimized cycle parameters
+    per wind speed. Single-wind-speed simulations can still be run either
+    directly or with optimization.
 
     The model requires three configuration files in awesIO format:
     - System configuration (kite, tether, ground station properties)
-    - Wind resource (altitude profiles, clusters, probability matrix)
+    - Wind resource (altitude profiles, profiles, probability matrix)
     - Simulation settings (cycle parameters, optimizer bounds, phase settings)
     """
 
@@ -63,7 +62,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
             simulation_settings_path (Path): Path to simulation settings YAML
                 file containing cycle, phase, optimizer, and solver parameters.
             wind_resource_path (Path): Path to wind resource YAML file
-                containing altitude profiles, clusters, and probability matrix.
+                containing altitude profiles, profiles, and probability matrix.
             validate (bool): If True, validate configuration files using
                 the awesIO validator. Defaults to True.
 
@@ -114,27 +113,24 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
 
     def compute_power_curves(
         self,
-        method: str = "direct",
         wind_speeds: Optional[np.ndarray] = None,
-        cluster_ids: Optional[List[int]] = None,
+        profile_ids: Optional[List[int]] = None,
         output_path: Path = None,
         verbose: bool = True,
         showplot: bool = False,
         saveplot: bool = False,
         validate: bool = True,
     ) -> Dict[str, Any]:
-        """Compute power curves using direct simulation or optimization.
+        """Compute power curves.
 
         Args:
             output_path (Path): Path where power curve YAML will be written.
                 If None, no export is performed. Defaults to None.
-            method (str): Simulation method, either ``'direct'`` or
-                ``'optimization'``. Defaults to ``'direct'``.
             wind_speeds (np.ndarray): Custom wind speeds to evaluate [m/s].
                 If None, uses wind speeds from simulation settings.
                 Defaults to None.
-            cluster_ids (list): Cluster IDs (1-indexed) to calculate. If None,
-                calculates all clusters. Defaults to None.
+            profile_ids (list): profile IDs (1-indexed) to calculate. If None,
+                calculates all profiles. Defaults to None.
             verbose (bool): Whether to print progress output.
                 Defaults to True.
             showplot (bool): Whether to display plots after generation.
@@ -148,37 +144,22 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
             dict: Power curve data in awesIO format.
 
         Raises:
-            ValueError: If model is not initialized or method is unknown.
+            ValueError: If model is not initialized.
         """
         if self.constructor is None:
             raise ValueError(
                 "Power model not initialized. Call load_configuration first."
             )
 
-        if method == "direct":
-            print(f"Computing power curves using direct simulation...")
-            data = self.constructor.generate_power_curves_direct(
-                wind_speeds=wind_speeds,
-                cluster_ids=cluster_ids,
-                output_path=output_path,
-                verbose=verbose,
-                show_plot=showplot,
-                save_plot=saveplot,
-            )
-        elif method == "optimization":
-            print(f"Computing power curves using optimization...")
-            data = self.constructor.generate_power_curves_optimized(
-                wind_speeds=wind_speeds,
-                cluster_ids=cluster_ids,
-                output_path=output_path,
-                verbose=verbose,
-                show_plot=showplot,
-                save_plot=saveplot,
-            )
-        else:
-            raise ValueError(
-                f"Unknown method '{method}'. Use 'direct' or 'optimization'."
-            )
+        print("Computing power curves...")
+        data = self.constructor.generate_power_curves(
+            wind_speeds=wind_speeds,
+            profile_ids=profile_ids,
+            output_path=output_path,
+            verbose=verbose,
+            show_plot=showplot,
+            save_plot=saveplot,
+        )
 
         if output_path is not None:
             print(f"Power curves exported to: {output_path}")
@@ -195,7 +176,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
         self,
         wind_speed: float,
         method: str = "direct",
-        cluster_id: int = 1,
+        profile_id: int = 1,
         output_path: Path = None,
         verbose: bool = True,
         showplot: bool = False,
@@ -211,7 +192,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
             wind_speed (float): Wind speed at reference height [m/s].
             method (str): Simulation method, either ``'direct'`` or
                 ``'optimization'``. Defaults to ``'direct'``.
-            cluster_id (int): Cluster ID (1-indexed) for wind profile
+            profile_id (int): profile ID (1-indexed) for wind profile
                 selection. Defaults to 1.
             output_path (Path): Path where results YAML will be written.
                 If None, no export is performed. Defaults to None.
@@ -237,7 +218,7 @@ class InertiaFreeQSMPowerModel(PowerEstimationModel):
 
         result = self.constructor.simulate_single_wind_speed(
             wind_speed=wind_speed,
-            cluster_id=cluster_id,
+            profile_id=profile_id,
             method=method,
             output_path=output_path,
             verbose=verbose,
