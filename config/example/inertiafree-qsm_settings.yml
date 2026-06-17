@@ -46,7 +46,7 @@ optimization:
       transition_rori: 0.05
 
     # Maximum number of iterations per wind speed point
-    max_iterations: 120
+    max_iterations: 40
     # Function tolerance for convergence (absolute, in watts)
     ftol: 0.005
     # Fallback finite-difference step size in scaled variable space.
