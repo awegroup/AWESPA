@@ -223,7 +223,6 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
     )
 
     direction_contributions: List[Dict[str, Any]] = []
-    direction_aep_wh = np.zeros(n_directions, dtype=float)
     direction_frequencies = np.sum(profile_prob_3d, axis=(0, 1))
     for direction_idx in range(n_directions):
         energy_wh = 0.0
@@ -231,7 +230,6 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
             energy_wh += float(
                 np.sum(profile_powers_interp[profile_idx] * profile_prob_3d[profile_idx, :, direction_idx])
             ) * HOURS_PER_YEAR
-        direction_aep_wh[direction_idx] = energy_wh
         direction_contributions.append({
             'direction_id': int(direction_idx + 1),
             'direction_center_rad': float(np.deg2rad(direction_centers_deg[direction_idx])),
