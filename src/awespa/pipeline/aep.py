@@ -240,14 +240,12 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
 
     # Compute per-wind-speed-bin breakdown.
     wind_speed_contributions: List[Dict[str, Any]] = []
-    speed_aep_wh = np.zeros(wind_bin_count, dtype=float)
     speed_frequencies = np.sum(profile_prob_3d, axis=(0, 2))
     for speed_idx in range(wind_bin_count):
         energy_wh = 0.0
         for profile_idx in range(n_power_profiles):
             prob_at_speed = float(np.sum(profile_prob_3d[profile_idx, speed_idx, :]))
             energy_wh += profile_powers_interp[profile_idx][speed_idx] * prob_at_speed * HOURS_PER_YEAR
-        speed_aep_wh[speed_idx] = energy_wh
         wind_speed_contributions.append({
             'wind_speed_bin_id': int(speed_idx + 1),
             'wind_speed_m_s': float(wind_bin_centers[speed_idx]),
