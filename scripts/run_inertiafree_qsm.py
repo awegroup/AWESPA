@@ -28,7 +28,7 @@ def main():
 
     resultsDir = PROJECT_ROOT / "results"
     resultsDir.mkdir(parents=True, exist_ok=True)
-    outputPath = resultsDir / "power_curves.yml"
+    outputPath = resultsDir / "inertiafree_qsm_power_curves.yml"
 
     # ---- initialise and load model ---------------------------------------
     model = InertiaFreeQSMPowerModel()
