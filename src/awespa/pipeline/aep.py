@@ -72,9 +72,6 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
                             wind_data: Dict[str, Any]) -> Dict[str, Any]:
     """Compute AEP from power curve and wind resource data.
     
-    Supports both old format (wind_speed_bins, cluster_power_curves) and
-    new AWESIO format (reference_wind_speeds_m_s, power_curves).
-    
     Args:
         power_data: Power curve data dictionary.
         wind_data: Wind resource data dictionary.
@@ -130,36 +127,16 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
     else:
         probability_matrix_2d = probability_matrix
         probability_matrix_3d = probability_matrix[:, :, np.newaxis]
-    
-    # Detect power curve format
-    if 'reference_wind_speeds_m_s' in power_data:
-        # New AWESIO format
-        bin_centers = np.array(power_data['reference_wind_speeds_m_s'])
-        power_curves = power_data['power_curves']
-        for profile in power_curves:
-            profile['cycle_power_w'] = _electrical_power_values(profile)
-        is_new_format = True
-    elif 'reference_wind_speeds' in power_data:
-        # Luchsinger / inertiafree-qsm output format — normalize in-place for plots
-        bin_centers = np.array(power_data['reference_wind_speeds'])
-        for profile in power_data['power_curves']:
-            profile['cycle_power_w'] = _electrical_power_values(profile)
-        # Expose under the key the plot functions expect
-        power_data['reference_wind_speeds_m_s'] = power_data['reference_wind_speeds']
-        power_curves = [
-            {
-                'profile_id': p.get('profile_id', i + 1),
-                'probability_weight': p.get('probability_weight', 1.0),
-                'cycle_power_w': p['cycle_power_w'],
-            }
-            for i, p in enumerate(power_data['power_curves'])
-        ]
-        is_new_format = True
-    else:
-        # Old format
-        bin_centers = np.array(power_data['wind_speed_bins']['bin_centers_m_s'])
-        power_curves = power_data['cluster_power_curves']
-        is_new_format = False
+
+    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+        raise ValueError(
+            "Unsupported power curve format. Expected keys 'reference_wind_speeds_m_s' and 'power_curves'."
+        )
+
+    bin_centers = np.array(power_data['reference_wind_speeds_m_s'])
+    power_curves = power_data['power_curves']
+    for profile in power_curves:
+        profile['cycle_power_w'] = _electrical_power_values(profile)
     
     # Get wind speed bins from wind resource for probability matching
     wind_speed_bins = wind_data['wind_speed_bins']
@@ -182,11 +159,18 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
 
     # Build interpolated power curves for each profile on wind-resource speed bins.
     n_power_profiles = len(power_curves)
+    n_wind_profiles = probability_matrix_2d.shape[0] if probability_matrix_2d.ndim >= 2 else 0
+    if n_power_profiles != n_wind_profiles:
+        raise ValueError(
+            "Profile count mismatch between power curves and wind resource: "
+            f"power_curves={n_power_profiles}, wind_resource_profiles={n_wind_profiles}."
+        )
+
     profile_ids: List[int] = []
     profile_powers_interp: List[np.ndarray] = []
     for i, curve in enumerate(power_curves):
-        profile_id = curve.get('profile_id', i + 1) if is_new_format else curve.get('cluster_id', i + 1)
-        powers = np.array(curve['cycle_power_w'] if is_new_format else _electrical_power_values(curve), dtype=float)
+        profile_id = curve.get('profile_id', i + 1)
+        powers = np.array(curve['cycle_power_w'], dtype=float)
         if len(bin_centers) != len(wind_bin_centers):
             powers_interp = np.interp(wind_bin_centers, bin_centers, powers)
         else:
@@ -196,21 +180,8 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
         profile_powers_interp.append(np.array(powers_interp[:wind_bin_count], dtype=float))
 
     # Build probability tensors matching the power-profile definition.
-    if is_new_format and n_power_profiles == 1:
-        # Single profile represents all shear clusters, so aggregate over probability profiles.
-        profile_prob_2d = np.sum(probability_matrix_2d, axis=0, keepdims=True) / 100.0
-        profile_prob_3d = np.sum(probability_matrix_3d, axis=0, keepdims=True) / 100.0
-    else:
-        profile_prob_2d = np.zeros((n_power_profiles, wind_bin_count), dtype=float)
-        profile_prob_3d = np.zeros((n_power_profiles, wind_bin_count, probability_matrix_3d.shape[2]), dtype=float)
-        for i in range(n_power_profiles):
-            if i < probability_matrix_2d.shape[0]:
-                profile_prob_2d[i, :] = probability_matrix_2d[i, :] / 100.0
-                profile_prob_3d[i, :, :] = probability_matrix_3d[i, :, :] / 100.0
-            elif wind_bin_count > 0:
-                # Fallback: uniform probability in wind speed and a single direction slice.
-                profile_prob_2d[i, :] = np.ones(wind_bin_count, dtype=float) / wind_bin_count
-                profile_prob_3d[i, :, 0] = profile_prob_2d[i, :]
+    profile_prob_2d = probability_matrix_2d[:, :wind_bin_count] / 100.0
+    profile_prob_3d = probability_matrix_3d[:, :wind_bin_count, :] / 100.0
 
     # Compute per-profile AEP contributions.
     profile_contributions: List[Dict[str, Any]] = []
@@ -318,14 +289,10 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
                 })
     
     # Calculate rated power and capacity factor
-    if is_new_format:
-        # For new format, get max power from the first (and possibly only) profile
-        all_powers = []
-        for curve in power_curves:
-            all_powers.extend(curve['cycle_power_w'])
-        rated_power = max(all_powers) if all_powers else 0.0
-    else:
-        rated_power = power_data['aggregate_power_curve']['max_power_w']
+    all_powers = []
+    for curve in power_curves:
+        all_powers.extend(curve['cycle_power_w'])
+    rated_power = max(all_powers) if all_powers else 0.0
     
     average_power = total_aep_wh / HOURS_PER_YEAR
     capacity_factor = average_power / rated_power if rated_power > 0 else 0
@@ -470,23 +437,14 @@ def _plot_cluster_frequency(ax, aep_results: Dict[str, Any],
 
 def _plot_aggregate_power_curve(ax, power_data: Dict[str, Any]) -> None:
     """Plot aggregate power curve."""
-    # Handle both old and new AWESIO formats
-    if 'reference_wind_speeds_m_s' in power_data:
-        # New AWESIO format - use first power curve as aggregate
-        wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
-        powers = np.array(power_data['power_curves'][0]['cycle_power_w']) / 1000  # Convert to kW
-        max_power = max(powers)
-    elif 'reference_wind_speeds' in power_data:
-        # Luchsinger format
-        wind_speeds = np.array(power_data['reference_wind_speeds'])
-        powers = np.array(power_data['power_curves'][0]['cycle_power_w']) / 1000  # Convert to kW
-        max_power = max(powers)
-    else:
-        # Old format
-        aggregate = power_data['aggregate_power_curve']
-        wind_speeds = np.array(aggregate['wind_speeds_m_s'])
-        powers = np.array(aggregate['power_values_w']) / 1000  # Convert to kW
-        max_power = aggregate['max_power_w'] / 1000
+    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+        raise ValueError(
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+        )
+
+    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    powers = np.array(power_data['power_curves'][0]['cycle_power_w']) / 1000  # Convert to kW
+    max_power = max(powers)
     
     ax.plot(wind_speeds, powers, 'b-', linewidth=2, label='Power Curve')
     ax.axhline(y=max_power, color='r', linestyle='--', label='Rated Power')
@@ -499,28 +457,16 @@ def _plot_aggregate_power_curve(ax, power_data: Dict[str, Any]) -> None:
 
 def _plot_cluster_power_curves(ax, power_data: Dict[str, Any]) -> None:
     """Plot all cluster power curves."""
-    # Handle both old and new AWESIO formats
-    if 'reference_wind_speeds_m_s' in power_data:
-        # New AWESIO format
-        wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
-        for curve in power_data['power_curves']:
-            powers = np.array(curve['cycle_power_w']) / 1000  # Convert to kW
-            ax.plot(wind_speeds, powers, alpha=0.7, 
-                    label=f"Profile {curve['profile_id']}")
-    elif 'reference_wind_speeds' in power_data:
-        # Luchsinger format
-        wind_speeds = np.array(power_data['reference_wind_speeds'])
-        for curve in power_data['power_curves']:
-            powers = np.array(curve['cycle_power_w']) / 1000  # Convert to kW
-            ax.plot(wind_speeds, powers, alpha=0.7,
-                    label=f"Profile {curve['profile_id']}")
-    else:
-        # Old format
-        for curve in power_data['cluster_power_curves']:
-            wind_speeds = np.array(curve['wind_speeds_m_s'])
-            powers = np.array(curve['power_values_w']) / 1000  # Convert to kW
-            ax.plot(wind_speeds, powers, alpha=0.7, 
-                    label=f"Cluster {curve['cluster_id']}")
+    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+        raise ValueError(
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+        )
+
+    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    for curve in power_data['power_curves']:
+        powers = np.array(curve['cycle_power_w']) / 1000  # Convert to kW
+        ax.plot(wind_speeds, powers, alpha=0.7,
+                label=f"Profile {curve['profile_id']}")
     
     ax.set_xlabel('Wind Speed (m/s)')
     ax.set_ylabel('Power (kW)')
@@ -591,15 +537,14 @@ def _plot_wind_rose_power(ax, power_data: Dict[str, Any], wind_data: Dict[str, A
         ax.set_title('Power by Wind Direction')
         return
     
+    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+        raise ValueError(
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+        )
+
     # Get wind speeds and power values
-    if 'reference_wind_speeds_m_s' in power_data:
-        wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
-        powers = np.array(power_data['power_curves'][0]['cycle_power_w'])
-    elif 'reference_wind_speeds' in power_data:
-        wind_speeds = np.array(power_data['reference_wind_speeds'])
-        powers = np.array(power_data['power_curves'][0]['cycle_power_w'])
-    else:
-        return
+    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    powers = np.array(power_data['power_curves'][0]['cycle_power_w'])
     
     # Calculate power contribution per direction
     # Sum across all clusters and wind speeds, weighted by probability and power
