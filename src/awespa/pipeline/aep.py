@@ -128,12 +128,12 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
         probability_matrix_2d = probability_matrix
         probability_matrix_3d = probability_matrix[:, :, np.newaxis]
 
-    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+    if 'reference_wind_speeds' not in power_data or 'power_curves' not in power_data:
         raise ValueError(
-            "Unsupported power curve format. Expected keys 'reference_wind_speeds_m_s' and 'power_curves'."
+            "Unsupported power curve format. Expected keys 'reference_wind_speeds' and 'power_curves'."
         )
 
-    bin_centers = np.array(power_data['reference_wind_speeds_m_s'])
+    bin_centers = np.array(power_data['reference_wind_speeds'])
     power_curves = power_data['power_curves']
     for profile in power_curves:
         profile['cycle_power_w'] = _electrical_power_values(profile)
@@ -437,12 +437,12 @@ def _plot_cluster_frequency(ax, aep_results: Dict[str, Any],
 
 def _plot_aggregate_power_curve(ax, power_data: Dict[str, Any]) -> None:
     """Plot aggregate power curve."""
-    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+    if 'reference_wind_speeds' not in power_data or 'power_curves' not in power_data:
         raise ValueError(
-            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds' and 'power_curves'."
         )
 
-    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    wind_speeds = np.array(power_data['reference_wind_speeds'])
     powers = np.array(power_data['power_curves'][0]['cycle_power_w']) / 1000  # Convert to kW
     max_power = max(powers)
     
@@ -457,12 +457,12 @@ def _plot_aggregate_power_curve(ax, power_data: Dict[str, Any]) -> None:
 
 def _plot_cluster_power_curves(ax, power_data: Dict[str, Any]) -> None:
     """Plot all cluster power curves."""
-    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+    if 'reference_wind_speeds' not in power_data or 'power_curves' not in power_data:
         raise ValueError(
-            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds' and 'power_curves'."
         )
 
-    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    wind_speeds = np.array(power_data['reference_wind_speeds'])
     for curve in power_data['power_curves']:
         powers = np.array(curve['cycle_power_w']) / 1000  # Convert to kW
         ax.plot(wind_speeds, powers, alpha=0.7,
@@ -537,13 +537,13 @@ def _plot_wind_rose_power(ax, power_data: Dict[str, Any], wind_data: Dict[str, A
         ax.set_title('Power by Wind Direction')
         return
     
-    if 'reference_wind_speeds_m_s' not in power_data or 'power_curves' not in power_data:
+    if 'reference_wind_speeds' not in power_data or 'power_curves' not in power_data:
         raise ValueError(
-            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds_m_s' and 'power_curves'."
+            "Unsupported power curve format for plotting. Expected 'reference_wind_speeds' and 'power_curves'."
         )
 
     # Get wind speeds and power values
-    wind_speeds = np.array(power_data['reference_wind_speeds_m_s'])
+    wind_speeds = np.array(power_data['reference_wind_speeds'])
     powers = np.array(power_data['power_curves'][0]['cycle_power_w'])
     
     # Calculate power contribution per direction
