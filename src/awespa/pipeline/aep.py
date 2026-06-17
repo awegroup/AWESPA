@@ -4,8 +4,15 @@ import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from datetime import datetime
+
+
+class _NoAliasSafeDumper(yaml.SafeDumper):
+    """Safe YAML dumper that keeps result files explicit and readable."""
+
+    def ignore_aliases(self, data):
+        return True
 
 
 def calculate_aep(
@@ -45,7 +52,13 @@ def calculate_aep(
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
-            yaml.dump(aep_results, f, default_flow_style=False)
+            yaml.dump(
+                aep_results,
+                f,
+                Dumper=_NoAliasSafeDumper,
+                default_flow_style=False,
+                sort_keys=False,
+            )
         print(f"AEP results saved to {output_path}")
     
     # Generate plots if requested
@@ -70,32 +83,67 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
         Dictionary with AEP results.
     """
     HOURS_PER_YEAR = 8760
-    
+
+    def _energy_fields(energy_wh: float) -> Dict[str, float]:
+        """Convert Wh to MWh for AEP reporting."""
+        return {
+            'aep_mwh': float(energy_wh / 1e6),
+        }
+
+    def _get_direction_centers_deg(n_directions: int) -> np.ndarray:
+        """Get wind direction bin centers in degrees from metadata or fallback."""
+        direction_bins = wind_data.get('wind_direction_bins', {})
+        centers = direction_bins.get('bin_centers_deg', direction_bins.get('bin_centers', []))
+        if len(centers) == n_directions:
+            return np.array(centers, dtype=float)
+
+        direction_bin_width = (
+            wind_data.get('metadata', {}).get('wind_direction_bin_width_deg')
+            or wind_data.get('metadata', {}).get('wind_direction_bin_width', 360.0 / max(n_directions, 1))
+        )
+        return np.arange(n_directions, dtype=float) * float(direction_bin_width) + float(direction_bin_width) / 2.0
+
+    def _electrical_power_values(curve: Dict[str, Any]) -> List[float]:
+        """Return electrical average cycle power values from a power-curve record."""
+        if 'wind_speed_data' in curve:
+            return [
+                float(item['performance']['electrical_power']['average_cycle_power'])
+                for item in curve['wind_speed_data']
+            ]
+        if 'electrical_cycle_power_w' in curve:
+            return [float(power) for power in curve['electrical_cycle_power_w']]
+        if 'power_values_electrical_w' in curve:
+            return [float(power) for power in curve['power_values_electrical_w']]
+        raise KeyError(
+            "Power curve does not contain electrical power values. Expected "
+            "wind_speed_data[*].performance.electrical_power.average_cycle_power."
+        )
+
     # Extract probability data from wind resource
-    probability_matrix = np.array(wind_data['probability_matrix']['data'])
-    
-    # Handle both 2D (clusters x wind_speeds) and 3D (clusters x wind_speeds x wind_directions) probability matrices
-    if probability_matrix.ndim == 3:
-        # Sum across wind direction dimension to get 2D matrix
-        probability_matrix_2d = np.sum(probability_matrix, axis=2)
+    probability_matrix = np.array(wind_data['probability_matrix']['data'], dtype=float)
+
+    # Handle both 2D (profiles x wind_speeds) and 3D (profiles x wind_speeds x wind_directions)
+    has_directional_data = probability_matrix.ndim == 3
+    if has_directional_data:
+        probability_matrix_3d = probability_matrix
+        probability_matrix_2d = np.sum(probability_matrix_3d, axis=2)
     else:
         probability_matrix_2d = probability_matrix
+        probability_matrix_3d = probability_matrix[:, :, np.newaxis]
     
     # Detect power curve format
     if 'reference_wind_speeds_m_s' in power_data:
         # New AWESIO format
         bin_centers = np.array(power_data['reference_wind_speeds_m_s'])
         power_curves = power_data['power_curves']
+        for profile in power_curves:
+            profile['cycle_power_w'] = _electrical_power_values(profile)
         is_new_format = True
     elif 'reference_wind_speeds' in power_data:
         # Luchsinger / inertiafree-qsm output format — normalize in-place for plots
         bin_centers = np.array(power_data['reference_wind_speeds'])
-        for i, profile in enumerate(power_data['power_curves']):
-            if 'cycle_power_w' not in profile:
-                profile['cycle_power_w'] = [
-                    item['performance']['power']['average_cycle_power']
-                    for item in profile['wind_speed_data']
-                ]
+        for profile in power_data['power_curves']:
+            profile['cycle_power_w'] = _electrical_power_values(profile)
         # Expose under the key the plot functions expect
         power_data['reference_wind_speeds_m_s'] = power_data['reference_wind_speeds']
         power_curves = [
@@ -119,100 +167,155 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
         wind_speed_bins.get('bin_centers_m_s',
         wind_speed_bins.get('bin_centers', []))
     )
-    
-    # Calculate AEP for each cluster/profile
-    cluster_contributions = []
-    total_aep_wh = 0.0
-    
-    # Check if we have a single flat profile (like Luchsinger model)
-    # In this case, aggregate all cluster probabilities
-    if is_new_format and len(power_curves) == 1:
-        # Single flat profile - aggregate all cluster probabilities
-        curve = power_curves[0]
-        profile_id = curve.get('profile_id', 1)
-        powers = np.array(curve['cycle_power_w'])
-        
-        # Interpolate power values to wind resource wind speed bins if needed
+
+    if wind_bin_centers.size == 0:
+        wind_bin_centers = bin_centers.copy()
+
+    # Align all arrays on the same wind-speed axis length.
+    wind_bin_count = min(
+        len(wind_bin_centers),
+        probability_matrix_2d.shape[1] if probability_matrix_2d.ndim >= 2 else len(wind_bin_centers),
+    )
+    wind_bin_centers = wind_bin_centers[:wind_bin_count]
+    probability_matrix_2d = probability_matrix_2d[:, :wind_bin_count]
+    probability_matrix_3d = probability_matrix_3d[:, :wind_bin_count, :]
+
+    # Build interpolated power curves for each profile on wind-resource speed bins.
+    n_power_profiles = len(power_curves)
+    profile_ids: List[int] = []
+    profile_powers_interp: List[np.ndarray] = []
+    for i, curve in enumerate(power_curves):
+        profile_id = curve.get('profile_id', i + 1) if is_new_format else curve.get('cluster_id', i + 1)
+        powers = np.array(curve['cycle_power_w'] if is_new_format else _electrical_power_values(curve), dtype=float)
         if len(bin_centers) != len(wind_bin_centers):
             powers_interp = np.interp(wind_bin_centers, bin_centers, powers)
         else:
-            powers_interp = powers
-        
-        # Aggregate probabilities across all clusters (sum over cluster dimension)
-        # This gives the overall wind speed distribution regardless of wind shear profile
-        probabilities = np.sum(probability_matrix_2d, axis=0) / 100.0  # Convert % to fraction
-        
-        # Ensure same length
-        min_len = min(len(powers_interp), len(probabilities))
-        powers_interp = powers_interp[:min_len]
-        probabilities = probabilities[:min_len]
-        
-        # Calculate expected power using aggregated probabilities
-        expected_power = np.sum(powers_interp * probabilities)
-        
-        # Calculate total AEP
-        total_aep_wh = expected_power * HOURS_PER_YEAR
-        
-        # Get frequency (should sum to ~1.0)
-        total_frequency = np.sum(probabilities)
-        
-        cluster_contributions.append({
-            'cluster_id': profile_id,
-            'frequency': float(total_frequency),
-            'expected_power_w': float(expected_power),
-            'aep_wh': float(total_aep_wh),
-            'aep_kwh': float(total_aep_wh / 1000),
-            'aep_mwh': float(total_aep_wh / 1e6),
-        })
+            powers_interp = powers[:wind_bin_count]
+
+        profile_ids.append(int(profile_id))
+        profile_powers_interp.append(np.array(powers_interp[:wind_bin_count], dtype=float))
+
+    # Build probability tensors matching the power-profile definition.
+    if is_new_format and n_power_profiles == 1:
+        # Single profile represents all shear clusters, so aggregate over probability profiles.
+        profile_prob_2d = np.sum(probability_matrix_2d, axis=0, keepdims=True) / 100.0
+        profile_prob_3d = np.sum(probability_matrix_3d, axis=0, keepdims=True) / 100.0
     else:
-        # Multiple profiles - calculate per cluster/profile
-        for i, curve in enumerate(power_curves):
-            if is_new_format:
-                profile_id = curve.get('profile_id', i + 1)
-                powers = np.array(curve['cycle_power_w'])
-                probability_weight = curve.get('probability_weight', 1.0 / len(power_curves))
-            else:
-                profile_id = curve.get('cluster_id', i + 1)
-                powers = np.array(curve['power_values_w'])
-                probability_weight = curve.get('frequency', 1.0 / len(power_curves))
-            
-            # Interpolate power values to wind resource wind speed bins if needed
-            if len(bin_centers) != len(wind_bin_centers):
-                powers_interp = np.interp(wind_bin_centers, bin_centers, powers)
-            else:
-                powers_interp = powers
-            
-            # Get probability distribution for this cluster from wind resource
+        profile_prob_2d = np.zeros((n_power_profiles, wind_bin_count), dtype=float)
+        profile_prob_3d = np.zeros((n_power_profiles, wind_bin_count, probability_matrix_3d.shape[2]), dtype=float)
+        for i in range(n_power_profiles):
             if i < probability_matrix_2d.shape[0]:
-                probabilities = probability_matrix_2d[i, :] / 100.0  # Convert % to fraction
-            else:
-                # Fallback: equal distribution
-                probabilities = np.ones(len(wind_bin_centers)) / len(wind_bin_centers)
-            
-            # Ensure same length
-            min_len = min(len(powers_interp), len(probabilities))
-            powers_interp = powers_interp[:min_len]
-            probabilities = probabilities[:min_len]
-            
-            # Calculate expected power for this cluster
-            expected_power = np.sum(powers_interp * probabilities)
-            
-            # Calculate AEP contribution
-            cluster_aep_wh = expected_power * HOURS_PER_YEAR
-            
-            # Get cluster frequency (sum of all probabilities for this cluster)
-            cluster_frequency = np.sum(probabilities)
-            
-            cluster_contributions.append({
-                'cluster_id': profile_id,
-                'frequency': float(cluster_frequency),
-                'expected_power_w': float(expected_power),
-                'aep_wh': float(cluster_aep_wh),
-                'aep_kwh': float(cluster_aep_wh / 1000),
-                'aep_mwh': float(cluster_aep_wh / 1e6),
+                profile_prob_2d[i, :] = probability_matrix_2d[i, :] / 100.0
+                profile_prob_3d[i, :, :] = probability_matrix_3d[i, :, :] / 100.0
+            elif wind_bin_count > 0:
+                # Fallback: uniform probability in wind speed and a single direction slice.
+                profile_prob_2d[i, :] = np.ones(wind_bin_count, dtype=float) / wind_bin_count
+                profile_prob_3d[i, :, 0] = profile_prob_2d[i, :]
+
+    # Compute per-profile AEP contributions.
+    profile_contributions: List[Dict[str, Any]] = []
+    profile_aep_wh = np.zeros(n_power_profiles, dtype=float)
+    profile_frequencies = np.sum(profile_prob_2d, axis=1)
+    profile_rated_powers = np.array(
+        [float(np.max(powers)) if powers.size > 0 else 0.0 for powers in profile_powers_interp],
+        dtype=float,
+    )
+    profile_rated_wind_speeds = np.array(
+        [
+            float(wind_bin_centers[int(np.argmax(powers))])
+            if powers.size > 0 and wind_bin_centers.size > 0
+            else 0.0
+            for powers in profile_powers_interp
+        ],
+        dtype=float,
+    )
+
+    for i, profile_id in enumerate(profile_ids):
+        energy_wh = float(np.sum(profile_powers_interp[i] * profile_prob_2d[i]) * HOURS_PER_YEAR)
+        profile_aep_wh[i] = energy_wh
+        profile_contributions.append({
+            'profile_id': profile_id,
+            'frequency': float(profile_frequencies[i]),
+            'rated_power_w': float(profile_rated_powers[i]),
+            'rated_wind_speed_m_s': float(profile_rated_wind_speeds[i]),
+            **_energy_fields(energy_wh),
+        })
+
+    total_aep_wh = float(np.sum(profile_aep_wh))
+
+    # Compute per-direction breakdown (if no directional matrix, this is one synthetic bin).
+    n_directions = profile_prob_3d.shape[2]
+    direction_centers_deg = _get_direction_centers_deg(n_directions)
+    direction_bin_width_deg = (
+        wind_data.get('metadata', {}).get('wind_direction_bin_width_deg')
+        or wind_data.get('metadata', {}).get('wind_direction_bin_width', 360.0 / max(n_directions, 1))
+    )
+
+    direction_contributions: List[Dict[str, Any]] = []
+    direction_aep_wh = np.zeros(n_directions, dtype=float)
+    direction_frequencies = np.sum(profile_prob_3d, axis=(0, 1))
+    for direction_idx in range(n_directions):
+        energy_wh = 0.0
+        for profile_idx in range(n_power_profiles):
+            energy_wh += float(
+                np.sum(profile_powers_interp[profile_idx] * profile_prob_3d[profile_idx, :, direction_idx])
+            ) * HOURS_PER_YEAR
+        direction_aep_wh[direction_idx] = energy_wh
+        direction_contributions.append({
+            'direction_id': int(direction_idx + 1),
+            'direction_center_rad': float(np.deg2rad(direction_centers_deg[direction_idx])),
+            'direction_bin_width_rad': float(np.deg2rad(direction_bin_width_deg)),
+            'frequency': float(direction_frequencies[direction_idx]),
+            **_energy_fields(energy_wh),
+        })
+
+    # Compute per-wind-speed-bin breakdown.
+    wind_speed_contributions: List[Dict[str, Any]] = []
+    speed_aep_wh = np.zeros(wind_bin_count, dtype=float)
+    speed_frequencies = np.sum(profile_prob_3d, axis=(0, 2))
+    for speed_idx in range(wind_bin_count):
+        energy_wh = 0.0
+        for profile_idx in range(n_power_profiles):
+            prob_at_speed = float(np.sum(profile_prob_3d[profile_idx, speed_idx, :]))
+            energy_wh += profile_powers_interp[profile_idx][speed_idx] * prob_at_speed * HOURS_PER_YEAR
+        speed_aep_wh[speed_idx] = energy_wh
+        wind_speed_contributions.append({
+            'wind_speed_bin_id': int(speed_idx + 1),
+            'wind_speed_m_s': float(wind_bin_centers[speed_idx]),
+            'frequency': float(speed_frequencies[speed_idx]),
+            **_energy_fields(energy_wh),
+        })
+
+    # Compute profile-direction contribution matrix as flattened records.
+    profile_direction_contributions: List[Dict[str, Any]] = []
+    for profile_idx, profile_id in enumerate(profile_ids):
+        for direction_idx in range(n_directions):
+            directional_prob = profile_prob_3d[profile_idx, :, direction_idx]
+            energy_wh = float(np.sum(profile_powers_interp[profile_idx] * directional_prob) * HOURS_PER_YEAR)
+            profile_direction_contributions.append({
+                'profile_id': int(profile_id),
+                'direction_id': int(direction_idx + 1),
+                'direction_center_rad': float(np.deg2rad(direction_centers_deg[direction_idx])),
+                'frequency': float(np.sum(directional_prob)),
+                **_energy_fields(energy_wh),
             })
-            
-            total_aep_wh += cluster_aep_wh
+
+    # Compute profile-direction-wind-speed contribution matrix as flattened records.
+    profile_direction_wind_speed_contributions: List[Dict[str, Any]] = []
+    for profile_idx, profile_id in enumerate(profile_ids):
+        for direction_idx in range(n_directions):
+            for speed_idx in range(wind_bin_count):
+                probability = float(profile_prob_3d[profile_idx, speed_idx, direction_idx])
+                energy_wh = float(profile_powers_interp[profile_idx][speed_idx] * probability * HOURS_PER_YEAR)
+                profile_direction_wind_speed_contributions.append({
+                    'profile_id': int(profile_id),
+                    'direction_id': int(direction_idx + 1),
+                    'direction_center_rad': float(np.deg2rad(direction_centers_deg[direction_idx])),
+                    'wind_speed_bin_id': int(speed_idx + 1),
+                    'wind_speed_m_s': float(wind_bin_centers[speed_idx]),
+                    'frequency': probability,
+                    **_energy_fields(energy_wh),
+                })
     
     # Calculate rated power and capacity factor
     if is_new_format:
@@ -226,23 +329,52 @@ def _compute_aep_from_data(power_data: Dict[str, Any],
     
     average_power = total_aep_wh / HOURS_PER_YEAR
     capacity_factor = average_power / rated_power if rated_power > 0 else 0
+
+    max_rated_idx = int(np.argmax(profile_rated_powers)) if profile_rated_powers.size > 0 else 0
+    max_rated_power_w = float(profile_rated_powers[max_rated_idx]) if profile_rated_powers.size > 0 else 0.0
+    max_rated_wind_speed_m_s = (
+        float(profile_rated_wind_speeds[max_rated_idx]) if profile_rated_wind_speeds.size > 0 else 0.0
+    )
     
     return {
         'metadata': {
-            'calculation_timestamp': datetime.now().isoformat(),
-            'power_curve_source': str(power_data.get('metadata', {})),
-            'wind_resource_source': str(wind_data.get('metadata', {})),
+            'name': 'Annual Energy Production',
+            'description': 'AEP calculated from power curves and wind-resource probabilities',
+            'note': 'None',
+            'awesIO_version': 'None',
+            'schema': 'aep_schema.yml',
+            'time_created': datetime.now().isoformat(),
         },
-        'total_aep': {
-            'wh': float(total_aep_wh),
-            'kwh': float(total_aep_wh / 1000),
-            'mwh': float(total_aep_wh / 1e6),
-            'gwh': float(total_aep_wh / 1e9),
+        'inputs': {
+            'power_curve_metadata': power_data.get('metadata', {}),
+            'wind_resource_metadata': wind_data.get('metadata', {}),
         },
-        'rated_power_kw': float(rated_power / 1000),
-        'mean_power_kw': float(average_power / 1000),
-        'capacity_factor': float(capacity_factor),
-        'cluster_contributions': cluster_contributions,
+        'power_summary': {
+            'capacity_factor': float(capacity_factor),
+            'max_rated_power_w': max_rated_power_w,
+            'max_rated_power_wind_speed_m_s': max_rated_wind_speed_m_s,
+            'mean_power_w': float(average_power),
+            'profiles': [
+                {
+                    'profile_id': int(profile_id),
+                    'rated_power_w': float(rated_power_w),
+                    'rated_wind_speed_m_s': float(rated_wind_speed_m_s),
+                }
+                for profile_id, rated_power_w, rated_wind_speed_m_s in zip(
+                    profile_ids, profile_rated_powers, profile_rated_wind_speeds
+                )
+            ],
+        },
+        'annual_energy_production': {
+            'total': {
+                'aep_mwh': float(total_aep_wh / 1e6),
+            },
+            'by_profile': profile_contributions,
+            'by_direction': direction_contributions,
+            'by_wind_speed': wind_speed_contributions,
+            'by_profile_and_direction': profile_direction_contributions,
+            'by_profile_and_direction_and_wind_speed': profile_direction_wind_speed_contributions,
+        },
     }
 
 
@@ -307,8 +439,8 @@ def _generate_aep_plots(aep_results: Dict[str, Any],
 
 def _plot_cluster_aep_contribution(ax, aep_results: Dict[str, Any]) -> None:
     """Plot pie chart of cluster AEP contributions."""
-    contributions = aep_results['cluster_contributions']
-    cluster_ids = [c['cluster_id'] for c in contributions]
+    contributions = aep_results['annual_energy_production']['by_profile']
+    cluster_ids = [c['profile_id'] for c in contributions]
     aep_values = [c['aep_mwh'] for c in contributions]
     
     ax.pie(aep_values, labels=cluster_ids, autopct='%1.1f%%', startangle=90)
@@ -428,12 +560,10 @@ def _plot_wind_speed_distribution(ax, wind_data: Dict[str, Any]) -> None:
 
 def _plot_capacity_factor_summary(ax, aep_results: Dict[str, Any]) -> None:
     """Plot capacity factor summary as a bar chart."""
-    cf = aep_results['capacity_factor'] * 100
-    mean_power = aep_results['mean_power_kw']
-    rated_power = aep_results['rated_power_kw']
-    
-    # Calculate average expected power across all clusters
-    avg_expected_power = np.mean([c['expected_power_w'] for c in aep_results['cluster_contributions']]) / 1000
+    power_summary = aep_results['power_summary']
+    cf = power_summary['capacity_factor'] * 100
+    mean_power = power_summary['mean_power_w'] / 1000.0
+    rated_power = power_summary['max_rated_power_w'] / 1000.0
     
     labels = ['Average Power',  'Rated Power\n(Max)']
     values = [mean_power, rated_power]

@@ -49,7 +49,7 @@ def main():
 
     # ---- full power curve ----------------------------
     data = model.compute_power_curves(
-        profile_ids=[1],
+        profile_ids=None,
         output_path=outputPath,
         verbose=True,
         showplot=True,

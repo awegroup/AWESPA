@@ -188,7 +188,7 @@ aep_results = calculate_aep(
     plot=True,
     plot_output_dir=RESULTS / "plots",
 )
-print("aep_results['total_aep']")
+print(aep_results['annual_energy_production']["total"])
 ```
 
 ## Configuration files
