@@ -184,7 +184,7 @@ Complete pipeline example
       plot=True,
       plot_output_dir=RESULTS / "plots",
    )
-   print(aep_results['annual_energy_production']["total"])
+   print(f"AEP: {aep_results['annual_energy_production']['total']['aep_mwh']:.1f} MWh/year")
 
 Contributing
 ============
