@@ -155,51 +155,36 @@ Complete pipeline example
    wind_model = WindProfileClusteringModel()
    wind_model.load_configuration(CONFIG / "wind_clustering_settings.yml")
    wind_model.cluster(
-       dataPath=Path("data/wind_data/era5"),
-       outputPath=RESULTS / "wind_resource.yml",
-       verbose=True,
-       showplot=False,
-       saveplot=True,
+      dataPath=Path("data/wind_data/era5"),
+      outputPath=RESULTS / "wind_resource.yml",
+      verbose=True,
+      showplot=False,
+      saveplot=True,
    )
 
    # --- Step 2: Power curve generation ---
    power_model = LuchsingerPowerModel()
    power_model.load_configuration(
-       system_path=CONFIG / "kitepower V3_20.yml",
-       simulation_settings_path=CONFIG / "luchsinger_settings.yml",
-       wind_resource_path=RESULTS / "wind_resource.yml",
+      system_path=CONFIG / "tudelft V3_25.yml",
+      simulation_settings_path=CONFIG / "luchsinger_settings.yml",
+      wind_resource_path=RESULTS / "wind_resource.yml",
    )
    power_model.compute_power_curves(
-       output_path=RESULTS / "power_curves.yml",
-       verbose=True,
-       showplot=False,
-       saveplot=True,
+      output_path=RESULTS / "power_curves.yml",
+      verbose=True,
+      showplot=False,
+      saveplot=True,
    )
 
    # --- Step 3: AEP calculation ---
    aep_results = calculate_aep(
-       power_curve_path=RESULTS / "power_curves.yml",
-       wind_resource_path=RESULTS / "wind_resource.yml",
-       output_path=RESULTS / "aep_results.yml",
-       plot=True,
-       plot_output_dir=RESULTS / "plots",
+      power_curve_path=RESULTS / "power_curves.yml",
+      wind_resource_path=RESULTS / "wind_resource.yml",
+      output_path=RESULTS / "aep_results.yml",
+      plot=True,
+      plot_output_dir=RESULTS / "plots",
    )
-   print(f"AEP: {aep_results['aep_MWh']:.1f} MWh/year")
-
-Testing
--------
-
-Run all tests:
-
-.. code-block:: bash
-
-   pytest
-
-Run with coverage report:
-
-.. code-block:: bash
-
-   pytest --cov=awespa
+   print(f"AEP: {aep_results['annual_energy_production']['total']['aep_mwh']:.1f} MWh/year")
 
 Contributing
 ============

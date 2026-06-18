@@ -138,7 +138,7 @@ python scripts/run_wind_clustering.py
 python scripts/run_luchsinger.py
 ```
 
-**Step 2 (alternative) – Power curve generation (Inertia-Free QSM):**
+**OR (Inertia-Free QSM):**
 ```bash
 python scripts/run_inertiafree_qsm.py
 ```
@@ -202,18 +202,7 @@ Each step is controlled by one or more YAML files. Example files are provided in
 | `luchsinger_settings.yml` | Power module | Luchsinger simulation settings |
 | `inertiafree-qsm_settings.yml` | Power module | Inertia-Free QSM simulation settings |
 | `wind_resource.yml` | Power module, Pipeline | Output of the wind module; wind profiles and probability matrix |
-
-## Testing
-
-Run all tests:
-```bash
-pytest
-```
-
-Run with coverage report:
-```bash
-pytest --cov=awespa
-```
+| `power_curves.yml` | Pipeline | Output of the power module; power curves for each profile |
 
 ## Contributing
 

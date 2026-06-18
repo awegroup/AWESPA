@@ -57,9 +57,17 @@ Output format
 Both models write a YAML file in awesIO format with the following top-level
 keys:
 
-* ``reference_wind_speeds_m_s`` — wind speed vector used for evaluation
+* ``metadata`` — system configuration and model settings (wing area, mass,
+  generator efficiency, nominal power, cut-in/cut-out wind speeds, etc.)
+* ``altitudes`` — altitude grid [m] at which wind profiles are defined
+* ``reference_wind_speeds`` — wind speed vector [m/s] used for evaluation
 * ``power_curves`` — list of per-cluster power curve dictionaries, each
-  containing the cluster ID, profile metadata, and power values [W]
+  containing the profile ID, probability weight, wind profile shape,
+  and power output [W], tether forces [N], timings etc at each reference wind speed
+* ``time_history`` — metadata describing time-series channel outputs (including
+  tether forces, power, reel speed, altitude, wind speeds at kite,
+  aerodynamic forces, lift-to-drag ratio, and control angles) saved in
+  the accompanying ``.npz`` binary file
 
 This file is directly consumed by :func:`awespa.pipeline.aep.calculate_aep`.
 
