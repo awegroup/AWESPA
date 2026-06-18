@@ -4,17 +4,9 @@ InertiaFreeQSMPowerModel
 The ``InertiaFreeQSMPowerModel`` wraps the
 `inertiafree-qsm <https://github.com/jbredael/InertiaFree-QSM>`_
 package. The underlying model is an Inertia-Free Quasi-Steady Model (QSM)
-that simulates the full pumping cycle with three flight phases
-(traction, retraction, transition). It supports two power curve generation
-methods:
-
-``'direct'``
-    Fast evaluation using pre-defined cycle parameters from the simulation
-    settings file.
-
-``'optimization'``
-    Slower, numerically optimises the cycle parameters per wind speed to
-    maximise output power using SLSQP.
+that simulates the full pumping cycle with four flight phases
+(traction, retraction, transitionRIO, transitionRORI). It numerically optimises the cycle 
+parameters per wind speed to maximise output power using SLSQP.
 
 Wrapper
 -------------
@@ -31,21 +23,21 @@ Configuration files
 ``load_configuration`` expects three YAML files:
 
 ``system_path``
-    System configuration in awesIO format (same format as Luchsinger).
+    System configuration in awesIO format.
 
 ``simulation_settings_path``
     QSM-specific settings — aerodynamics, cycle parameters, phase settings,
     optimizer bounds, and solver tolerances.
 
 ``wind_resource_path``
-    Output of the wind module (same file as used by Luchsinger).
+    Output of the wind module.
 
 
 Simulation settings
 ~~~~~~~~~~~~~~~~~~~
 
 An annotated example is shown below
-(see ``config/example/intertiafree-qsm_settings.yml``):
+(see ``config/example/inertiafree-qsm_settings.yml``):
 
 .. code-block:: yaml
 
@@ -57,25 +49,12 @@ An annotated example is shown below
      kite_drag_coefficient_reel_in: 0.12
      tether_drag_coefficient: 1.1
 
-   # ===== DIRECT SIMULATION =====
-   direct_simulation:
-     wind_speeds:
-       cut_in: 6.0
-       cut_out: 25.0
-       n_points: 20
-       fine_resolution:
-         n_points_near_cutout: 0
-         range_m_s: 2.0
-
    # ===== OPTIMIZATION =====
    optimization:
      wind_speeds:
        cut_in: 3.0
        cut_out: 25.0
-       n_points: 10
-       fine_resolution:
-         n_points_near_cutout: 0
-         range_m_s: 2.0
+       n_points: 23
 
      optimizer:
        optimize_variables:
@@ -90,9 +69,13 @@ An annotated example is shown below
          transition_riro: 0.05
          traction: 2.5
          transition_rori: 0.05
-       max_iterations: 50
-       ftol: 5.0e-2
-       eps: 5.0e-2
+       max_iterations: 40
+       ftol: 0.005
+       eps: 1.0e-2
+       finite_difference_steps:
+         reeling_speed: 0.03
+         tether_fraction: 0.005
+         elevation_angle: 0.25
        x0: [2, -2, 0.65, 0.9, 30.0, 50.0]
        scaling: [1, 1, 1, 1, 30, 30]
 
@@ -103,9 +86,9 @@ An annotated example is shown below
        reeling_speed_retraction_max: -0.01
        fraction_tether_length_traction_end_min: 0.8
        fraction_tether_length_traction_end_max: 0.95
-       fraction_tether_length_retraction_end_min: 0.4
+       fraction_tether_length_retraction_end_min: 0.2
        fraction_tether_length_retraction_end_max: 0.8
-       elevation_angle_traction_min: 10.0
+       elevation_angle_traction_min: 30.0
        elevation_angle_traction_max: 60.0
        elevation_angle_end_trans_rori_min: 30.0
        elevation_angle_end_trans_rori_max: 80.0
@@ -118,9 +101,9 @@ An annotated example is shown below
    cycle:
      minimum_tether_force: 750.0
      minimum_height: 100.0
-     elevation_angle_traction: [30.0, 30.0, 30.0, 30.0]
+     elevation_angle_traction: [30.0, 30.0, 30.0, 30.0, 30.0]
      tether_length_end_traction: 0.95
-     tether_length_end_retraction: 0.65
+     tether_length_end_retraction: 0.6
      include_transition_energy: true
      elevation_angle_end_trans_rori: 50.0
 
@@ -154,6 +137,10 @@ An annotated example is shown below
      max_iterations: 250
      convergence_tolerance: 1.0e-3
 
+   # ===== PHASE SOLVER =====
+   phase_solver:
+     max_time_points: 5000
+
 
 Usage example
 -------------
@@ -166,34 +153,36 @@ Usage example
    model = InertiaFreeQSMPowerModel()
    model.load_configuration(
        system_path=Path("config/example/kitepower V3_20.yml"),
-       simulation_settings_path=Path("config/example/intertiafree-qsm_settings.yml"),
+       simulation_settings_path=Path("config/example/inertiafree-qsm_settings.yml"),
        wind_resource_path=Path("results/example/wind_resource.yml"),
    )
 
-   # Direct simulation (fast)
+   # Compute power curves
    model.compute_power_curves(
        output_path=Path("results/example/power_curves_qsm.yml"),
-       method="direct",
        verbose=True,
-       showplot=False,
+       showplot=True,
        saveplot=True,
    )
 
-   # Optimisation-based (slower, higher fidelity)
-   model.compute_power_curves(
-       output_path=Path("results/example/power_curves_qsm_optim.yml"),
-       method="optimization",
-       verbose=True,
-   )
-
-   # Single operating point
+   # Single operating point with a direct simulation, meaning that the parameters are not optimized but taken directly from the settings file. This is much faster than the default method, which runs an optimization loop to find the optimal parameters at each wind speed.
+   # Useful for testing
    power_w = model.calculate_power_at_wind_speed(
        wind_speed=10.0,
        method="direct",
        cluster_id=1,
        verbose=True,
    )
-   print(f"Power at 10 m/s: {power_w / 1000:.1f} kW")
+   print(f"Power at 10 m/s: {power_w / 1000:.1f} kW - DIRECT")
+
+   # Single operating point with an optimization-based simulation, meaning that the parameters are optimized to find the optimal settings for each wind speed.
+   power_w = model.calculate_power_at_wind_speed(
+       wind_speed=10.0,
+       method="optimization",
+       cluster_id=1,
+       verbose=True,
+   )
+   print(f"Power at 10 m/s: {power_w / 1000:.1f} kW - OPTIMIZATION")
 
 Or use the ready-made script:
 
