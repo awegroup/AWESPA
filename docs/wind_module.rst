@@ -13,9 +13,9 @@ Architecture
 The module is built around an Abstract Base Class (ABC) that defines the
 interface every wind model must implement.
 
-If a method is an abstract base class it means that not every wind model must have such a method, but if it does have it, it must follow the same interface. For example, the load_configuration method is not an abstract method, which means that every wind model must implement a load_configuration method with the same signature. However, the cluster, fit_profile, and prescribe_profile methods are not abstract methods, which means that they are optional for wind models to implement. If a wind model does not implement these methods, it can still be used in the pipeline as long as it implements the cluster method. 
+Abstract methods on the ``WindProfileModel`` ABC must be implemented by every wind model. Non-abstract methods define optional interfaces that implementations may override when supported (clustering, profile fitting, prescribing).
 
-For a the wind module it was difficult to define a single core functionality that all implementations must have, because different use cases may require different methods. For example, some users may only want to perform clustering, while others may want to fit profiles or prescribe analytical profiles. Therefore, we decided to make the load_configuration method the only required method for all wind models, and make the cluster, fit_profile, and prescribe_profile methods optional. This way, users can choose which functionalities they want to use based on their specific needs and data availability.
+For the wind module it was difficult to define a single core functionality that all implementations must have, because different use cases may require different methods. For example, some users may only want to perform clustering, while others may want to fit profiles or prescribe analytical profiles. Therefore, we decided to make the load_configuration method the only required method for all wind models, and make the cluster, fit_profile, and prescribe_profile methods optional. This way, users can choose which functionalities they want to use based on their specific needs and data availability.
 
 .. code-block:: text
 
