@@ -3,7 +3,7 @@ WindProfileClusteringModel
 
 The ``WindProfileClusteringModel`` is the standard AWESPA implementation of the
 wind module. It wraps the
-`wind-profile-clustering <https://github.com/jbredael/wind-profile-clustering-1>`_
+`wind-profile-clustering <https://github.com/awegroup/wind-profile-clustering-1>`_
 package and provides three functionalities:
 
 1. **Clustering** — identify representative wind profile shapes from

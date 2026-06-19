@@ -69,7 +69,7 @@ def calculate_power(wind_speed: float, air_density: float = 1.225) -> float:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/jbredael/AWESPA.git
+    git clone https://github.com/awegroup/AWESPA.git
     cd AWESPA
     ```
 
@@ -202,8 +202,8 @@ dependencies = [
     "scikit-learn",
     "xarray",
     "netCDF4",
-    "inertiafree-qsm @ git+https://github.com/jbredael/InertiaFree-QSM.git",
-    "power-luchsinger @ git+https://github.com/jbredael/LuchsingerPowerModel.git",
+    "inertiafree-qsm @ git+https://github.com/awegroup/InertiaFree-QSM.git",
+    "power-luchsinger @ git+https://github.com/awegroup/LuchsingerPowerModel.git",
     "wind-profile-clustering @ git+https://github.com/awegroup/wind-profile-clustering.git",
     "awesio @ git+https://github.com/awegroup/awesIO.git"
 ]
@@ -278,8 +278,8 @@ Documentation is built using Sphinx with the Furo theme.
 
 ## Resources
 
-- [**AWESPA Documentation**](https://jbredael.github.io/AWESPA/) - Getting started guide and API reference
+- [**AWESPA Documentation**](https://awegroup.github.io/AWESPA/) - Getting started guide and API reference
 - [AWE Group Developer Guide](https://awegroup.github.io/developer-guide/)
-- [AWESPA Repository](https://github.com/jbredael/AWESPA)
+- [AWESPA Repository](https://github.com/awegroup/AWESPA)
 - [Python Packaging Guide](https://packaging.python.org/)
 - [pytest Documentation](https://docs.pytest.org/)

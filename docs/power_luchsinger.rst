@@ -2,7 +2,7 @@ LuchsingerPowerModel
 ====================
 
 The ``LuchsingerPowerModel`` wraps the
-`power-luchsinger <https://github.com/jbredael/LuchsingerPowerModel>`_
+`power-luchsinger <https://github.com/awegroup/LuchsingerPowerModel>`_
 package. The underlying model is an energy-balance model for pumping-cycle
 AWE systems originally proposed by Luchsinger (2013). It analytically
 evaluates the cycle power for a given wind shear profile by splitting the

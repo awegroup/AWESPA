@@ -2,7 +2,7 @@ InertiaFreeQSMPowerModel
 ========================
 
 The ``InertiaFreeQSMPowerModel`` wraps the
-`inertiafree-qsm <https://github.com/jbredael/InertiaFree-QSM>`_
+`inertiafree-qsm <https://github.com/awegroup/InertiaFree-QSM>`_
 package. The underlying model is an Inertia-Free Quasi-Steady Model (QSM)
 that simulates the full pumping cycle with four flight phases
 (traction, retraction, transitionRIO, transitionRORI). It numerically optimises the cycle 

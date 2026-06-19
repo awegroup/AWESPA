@@ -56,7 +56,7 @@ AWESPA/
 If you want to use AWESPA in your own project without cloning this repository, install it directly from GitHub:
 
 ```bash
-pip install git+https://github.com/jbredael/AWESPA.git
+pip install git+https://github.com/awegroup/AWESPA.git
 ```
 
 After installation you can import AWESPA in any Python environment:
@@ -74,7 +74,7 @@ The example configuration files in `config/example/` of this repository can serv
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/jbredael/AWESPA.git
+    git clone https://github.com/awegroup/AWESPA.git
     cd AWESPA
     ```
 
