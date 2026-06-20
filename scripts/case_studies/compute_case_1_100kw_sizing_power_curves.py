@@ -50,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=1,
-        help="Number of parallel worker processes to use.",
+        default=8,
+        help="Number of parallel worker processes to use. Defaults to 8.",
     )
     parser.add_argument(
         "--generator-power",

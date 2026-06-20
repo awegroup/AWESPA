@@ -286,23 +286,27 @@ def make_system_file(
         "Generated case-study 1 100 kW sizing sweep system"
     )
 
-    wing = system["components"]["wing"]
+    wing = _system_wing(system)
     wing["name"] = kite["name"]
     wing["structure"]["projected_surface_area"] = float(kite["projected_area_m2"])
     wing["structure"]["mass"] = float(kite["mass_kg"])
 
-    bridle = system["components"].get("bridle")
+    bridle = _system_bridle(system)
     if bridle is not None:
         bridle["name"] = f"{kite['name']} Bridle"
 
-    tether = system["components"]["tether"]
+    kite_component = _system_kite_component(system)
+    if kite_component is not None:
+        kite_component["name"] = kite["name"]
+
+    tether = _system_tether(system)
     tether["name"] = f"{design_id} Tether"
     tether["structure"]["max_tether_force"] = float(max_force_n)
     tether["structure"]["diameter"] = float(diameter_m)
 
-    ground_station = system["components"]["ground_station"]
+    ground_station = _system_ground_station(system)
     ground_station["name"] = f"{design_id} Ground Station"
-    ground_station["generator"]["max_power"] = float(generator_kw * 1000.0)
+    _system_generator(ground_station)["max_power"] = float(generator_kw * 1000.0)
 
     output_path = GENERATED_SYSTEM_DIR / f"{design_id}.yml"
     write_yaml(output_path, system)
@@ -344,9 +348,9 @@ def generate_all_system_files() -> list[dict[str, Any]]:
 
 def metadata_from_system_file(system_path: Path) -> dict[str, Any]:
     system = load_yaml(system_path)
-    wing = system["components"]["wing"]
-    tether = system["components"]["tether"]
-    generator = system["components"]["ground_station"]["generator"]
+    wing = _system_wing(system)
+    tether = _system_tether(system)
+    generator = _system_generator(_system_ground_station(system))
     kite = kite_option_by_name(wing["name"])
 
     max_tether_force_n = float(tether["structure"]["max_tether_force"])
@@ -365,6 +369,44 @@ def metadata_from_system_file(system_path: Path) -> dict[str, Any]:
         "tether_diameter_m": float(tether["structure"]["diameter"]),
         "generator_power_kW": generator_power_w / 1000.0,
     }
+
+
+def _system_kite_component(system: dict[str, Any]) -> dict[str, Any] | None:
+    components = system["components"]
+    if "kites" in components:
+        return components["kites"][0]
+    return None
+
+
+def _system_wing(system: dict[str, Any]) -> dict[str, Any]:
+    kite_component = _system_kite_component(system)
+    if kite_component is not None:
+        return kite_component["wing"]
+    return system["components"]["wing"]
+
+
+def _system_bridle(system: dict[str, Any]) -> dict[str, Any] | None:
+    kite_component = _system_kite_component(system)
+    if kite_component is not None:
+        return kite_component.get("bridle")
+    return system["components"].get("bridle")
+
+
+def _system_tether(system: dict[str, Any]) -> dict[str, Any]:
+    components = system["components"]
+    if "tethers" in components:
+        return components["tethers"][0]
+    return components["tether"]
+
+
+def _system_ground_station(system: dict[str, Any]) -> dict[str, Any]:
+    return system["components"]["ground_station"]
+
+
+def _system_generator(ground_station: dict[str, Any]) -> dict[str, Any]:
+    if "generators" in ground_station:
+        return ground_station["generators"][0]
+    return ground_station["generator"]
 
 
 def generated_system_metadata() -> list[dict[str, Any]]:
