@@ -14,6 +14,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
+from matplotlib.patches import Ellipse, Patch
 
 from _case1_100kw_sizing_common import (
     AEP_DIR,
@@ -460,52 +461,146 @@ def _bbox_overlap_area(first: mpl.transforms.Bbox, second: mpl.transforms.Bbox) 
     return float(x_overlap * y_overlap)
 
 
+def _add_kite_group_ellipses(ax: plt.Axes, rows: list[dict[str, Any]]) -> None:
+    ax.figure.canvas.draw()
+    data_to_axes = ax.transData + ax.transAxes.inverted()
+
+    for kite_name, kite_rows in group_rows(rows, "kite_name").items():
+        points_data = np.array(
+            [
+                [float(row["capacity_factor_percent"]), float(row["aep_mwh"])]
+                for row in kite_rows
+            ]
+        )
+        if len(points_data) == 0:
+            continue
+
+        points_axes = data_to_axes.transform(points_data)
+        center = points_axes.mean(axis=0)
+        centered_points = points_axes - center
+        if len(points_axes) == 1:
+            eigenvectors = np.eye(2)
+            radii = np.array([0.04, 0.03])
+            width = 2.0 * radii[0]
+            height = 2.0 * radii[1]
+            angle = 0.0
+        else:
+            covariance = np.cov(centered_points, rowvar=False)
+            eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+            order = np.argsort(eigenvalues)[::-1]
+            eigenvectors = eigenvectors[:, order]
+            rotated_points = centered_points @ eigenvectors
+            base_radii = np.maximum(np.max(np.abs(rotated_points), axis=0), 1.0e-6)
+            normalized = rotated_points / base_radii
+            scale = max(1.0, float(np.sqrt(np.sum(normalized**2, axis=1)).max()))
+            radii = base_radii * scale * 1.04
+            radii += np.array([0.025, 0.022])
+            width = 2.0 * radii[0]
+            height = 2.0 * radii[1]
+            angle = math.degrees(math.atan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+
+        ellipse = Ellipse(
+            xy=center,
+            width=width,
+            height=height,
+            angle=angle,
+            facecolor="none",
+            edgecolor="0.25",
+            linewidth=1.1,
+            linestyle="--",
+            alpha=0.75,
+            zorder=2,
+            transform=ax.transAxes,
+        )
+        ax.add_patch(ellipse)
+
+        label_position = _kite_label_position_outside(
+            center,
+            eigenvectors,
+            radii,
+        )
+        label_ha, label_va = _axes_text_alignment(label_position)
+        ax.text(
+            float(label_position[0]),
+            float(label_position[1]),
+            kite_area_label(kite_name, rows),
+            fontsize=9,
+            ha=label_ha,
+            va=label_va,
+            color="0.2",
+            bbox={
+                "boxstyle": "round,pad=0.12",
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.85,
+            },
+            zorder=4,
+            transform=ax.transAxes,
+        )
+
+
+def _kite_label_position_outside(
+    center: np.ndarray,
+    eigenvectors: np.ndarray,
+    radii: np.ndarray,
+) -> np.ndarray:
+    top_right_direction = np.array([1.0, 1.0]) / math.sqrt(2.0)
+    rotated_direction = top_right_direction @ eigenvectors
+    boundary_distance = 1.0 / math.sqrt(
+        float(np.sum((rotated_direction / radii) ** 2))
+    )
+    label_offset = top_right_direction * boundary_distance * 1.6
+    return np.clip(center + label_offset, [0.03, 0.03], [0.97, 0.97])
+
+
+def _axes_text_alignment(position: np.ndarray) -> tuple[str, str]:
+    if position[0] > 0.92:
+        ha = "right"
+    elif position[0] < 0.08:
+        ha = "left"
+    else:
+        ha = "center"
+
+    if position[1] > 0.92:
+        va = "top"
+    elif position[1] < 0.08:
+        va = "bottom"
+    else:
+        va = "center"
+    return ha, va
+
+
 def plot_scatter(rows: list[dict[str, Any]], output: Path) -> None:
     apply_case_study_plot_style(mpl)
     output.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(FIGURE_WIDTH_IN, 4.8), constrained_layout=True)
 
     marker_by_tether = {60.0: "o", 70.0: "s", 80.0: "^"}
-    size_by_generator = {160.0: 36, 170.0: 90, 180.0: 170}
-    label_points: list[tuple[float, float, str, float]] = []
+    color_by_generator = {160.0: "#0072B2", 170.0: "#009E73", 180.0: "#D55E00"}
+    marker_size = 80
     for row in rows:
         x_value = float(row["capacity_factor_percent"])
         y_value = float(row["aep_mwh"])
         tether = float(row["max_tether_force_kN"])
         generator = float(row["generator_power_kW"])
-        marker_size = size_by_generator.get(generator, 70)
         ax.scatter(
             x_value,
             y_value,
             s=marker_size,
             marker=marker_by_tether.get(tether, "o"),
-            color=design_color(mpl, row["kite_name"], generator),
+            color=color_by_generator.get(generator, "0.4"),
             edgecolor="black",
             linewidth=0.5,
             alpha=0.9,
-        )
-        label_points.append(
-            (x_value, y_value, f"{float(row['rated_power_kW']):.1f}", marker_size)
+            zorder=3,
         )
 
     ax.set_xlabel("Capacity factor (%)")
     ax.set_ylabel("AEP (MWh)")
     ax.grid(True, alpha=0.25)
-    expand_scatter_limits(ax)
-    add_nonoverlapping_scatter_labels(ax, label_points)
-    expand_scatter_limits(ax)
+    expand_scatter_limits(ax, fraction=0.07)
+    _add_kite_group_ellipses(ax, rows)
 
-    kite_handles = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            linestyle="",
-            color=design_color(mpl, kite_name, 170.0),
-            label=kite_area_label(kite_name, rows),
-        )
-        for kite_name in sorted({row["kite_name"] for row in rows})
-    ]
     tether_handles = [
         Line2D(
             [0],
@@ -522,20 +617,15 @@ def plot_scatter(rows: list[dict[str, Any]], output: Path) -> None:
         for force in sorted({float(row["max_tether_force_kN"]) for row in rows})
     ]
     generator_handles = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            linestyle="",
-            color="0.2",
-            markersize=math.sqrt(size_by_generator.get(power, 70)),
+        Patch(
+            facecolor=color_by_generator.get(power, "0.4"),
+            edgecolor="black",
+            linewidth=0.5,
             label=f"{power:g} kW",
         )
         for power in sorted({float(row["generator_power_kW"]) for row in rows})
     ]
 
-    kite_legend = ax.legend(handles=kite_handles, loc="lower right", title="Kite size")
-    ax.add_artist(kite_legend)
     tether_legend = ax.legend(handles=tether_handles, loc="upper left", title="Tether force")
     ax.add_artist(tether_legend)
     ax.legend(
