@@ -1,0 +1,73 @@
+metadata:
+  name: case1_100kw_V11_160_80kN_170kW
+  description: Generated case-study 1 100 kW sizing sweep system
+  note: None
+  awesIO_version: 0.1.0
+  schema: system_schema.yml
+assembly:
+  connectivity_matrix:
+  - - K1
+    - T1
+  - - T2
+    - G1
+components:
+  kites:
+  - name: V11.160
+    type: soft_kite_kcu
+    version: 1.0
+    joints:
+      kcu_joint:
+        id: K1
+    wing:
+      name: V11.160
+      type: LEI_soft_kite
+      version: 1.0
+      structure:
+        projected_surface_area: 126.4
+        mass: 53.0
+    bridle:
+      name: V11.160 Bridle
+      type: LEI_soft_kite_bridle
+      version: 1.0
+      structure:
+        mass: 0.0
+    control_system:
+      name: 100 kW Meridional system KCU
+      type: kite_control_unit
+      version: 1.0
+      structure:
+        mass: 20.0
+  tethers:
+  - name: case1_100kw_V11_160_80kN_170kW Tether
+    type: non_conductive_tether
+    version: 1.0
+    joints:
+      upper_tether_joint:
+        id: T1
+      lower_tether_joint:
+        id: T2
+    structure:
+      length: 600
+      diameter: 0.014
+      density: 724.0
+      max_tether_force: 80000.0
+      conductive: false
+  ground_station:
+    name: case1_100kw_V11_160_80kN_170kW Ground Station
+    type: pumping_ground_gen_station
+    version: 1.0
+    joints:
+      drum_joint:
+        id: G1
+    structure:
+      mass: 0.0
+    drums:
+    - type: electric_winch
+      max_tether_speed: 15.0
+    generators:
+    - type: permanent_magnet_synchronous
+      max_power: 170000.0
+      efficiency: 0.95
+    storages:
+    - type: battery_bank
+      efficiency: 0.9

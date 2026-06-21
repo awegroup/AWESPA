@@ -21,14 +21,14 @@ from awespa.power.inertiafree_qsm_power import InertiaFreeQSMPowerModel
 def main():
     """Run InertiaFree-QSM model and export power curves."""
     # ---- paths -----------------------------------------------------------
-    configDir = PROJECT_ROOT / "config" / "example"
-    systemPath = configDir / "tudelft V3_25.yml"
-    simulationSettingsPath = configDir / "inertiafree-qsm_settings.yml"
-    windResourcePath = configDir / "wind_resource.yml"
+    configDir = PROJECT_ROOT / "config" / "meridional_case1"
+    systemPath = configDir / "case_1_selected_100kw" / "case1_100kw_V11_160_80kN_170kW.yml"
+    simulationSettingsPath = configDir / "case_1_selected_100kw" / "case1_100kw_V11_160_80kN_170kW_QSM_settings.yml"
+    windResourcePath = configDir / "clustered_case_2.yml"
 
-    resultsDir = PROJECT_ROOT / "results"
+    resultsDir = PROJECT_ROOT / "results" / "case_studies" / "case_2_selected_100kw"
     resultsDir.mkdir(parents=True, exist_ok=True)
-    outputPath = resultsDir / "inertiafree_qsm_power_curves.yml"
+    outputPath = resultsDir / "power_curves_case2_100kw_V11_160_80kN_170kW_clustered.yml"
 
     # ---- initialise and load model ---------------------------------------
     model = InertiaFreeQSMPowerModel()

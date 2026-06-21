@@ -27,20 +27,18 @@ from awespa.power.inertiafree_qsm_power import InertiaFreeQSMPowerModel
 
 
 FAILED_POWER_THRESHOLD_W = 1.0
-DEFAULT_SYSTEM_ID = "case1_100kw_V11_120_70kN_170kW"
+PLOT_SMOOTHING_WINDOW = 5
+DEFAULT_SYSTEM_ID = "case1_100kw_V11_160_80kN_170kW"
+DEFAULT_INPUT_DIR = (
+    PROJECT_ROOT / "config" / "meridional_case1" / "case_1_selected_100kw"
+)
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results" / "case_studies" / "case_1_selected_100kw"
 
 
 def default_paths() -> dict[str, Path]:
     return {
-        "system": PROJECT_ROOT
-        / "config"
-        / "meridional_case1"
-        / f"{DEFAULT_SYSTEM_ID}.yml",
-        "settings": PROJECT_ROOT
-        / "config"
-        / "meridional_case1"
-        / "100kW_QSM_settings.yml",
+        "system": DEFAULT_INPUT_DIR / f"{DEFAULT_SYSTEM_ID}.yml",
+        "settings": DEFAULT_INPUT_DIR / f"{DEFAULT_SYSTEM_ID}_QSM_settings.yml",
         "clustered_wind": PROJECT_ROOT
         / "config"
         / "meridional_case1"
@@ -137,6 +135,13 @@ def parse_args() -> argparse.Namespace:
         help="Power-law profile IDs to compute. Defaults to profile 1.",
     )
     parser.add_argument(
+        "--wind-speeds",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Reference wind speeds to compute. Defaults to the settings file grid.",
+    )
+    parser.add_argument(
         "--compute-power-curves",
         action="store_true",
         help="Recompute the QSM power curves before AEP.",
@@ -145,6 +150,11 @@ def parse_args() -> argparse.Namespace:
         "--validate",
         action="store_true",
         help="Validate QSM input/output YAMLs with awesIO.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print detailed QSM optimizer progress.",
     )
     return parser.parse_args()
 
@@ -160,7 +170,9 @@ def compute_power_curves(
     wind_resource_path: Path,
     output_path: Path,
     profile_ids: list[int] | None,
+    wind_speeds: np.ndarray | None,
     validate: bool,
+    verbose: bool,
 ) -> Path:
     print(f"\nComputing {label} power curves")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -172,9 +184,10 @@ def compute_power_curves(
         validate=validate,
     )
     model.compute_power_curves(
+        wind_speeds=wind_speeds,
         profile_ids=profile_ids,
         output_path=output_path,
-        verbose=True,
+        verbose=verbose,
         showplot=False,
         saveplot=True,
         validate=validate,
@@ -230,6 +243,25 @@ def _update_curve_power_values(curve: dict[str, Any], filled_power_w: np.ndarray
             "average_cycle_power"
         ] = float(power_w)
         item["successful"] = bool(power_w > FAILED_POWER_THRESHOLD_W)
+
+
+def _smooth_power_for_plot(power_kw: np.ndarray, window: int = PLOT_SMOOTHING_WINDOW) -> np.ndarray:
+    if window <= 1 or power_kw.size < 3:
+        return power_kw
+
+    window = min(window, power_kw.size)
+    if window % 2 == 0:
+        window -= 1
+    if window < 3:
+        return power_kw
+
+    pad = window // 2
+    padded = np.pad(power_kw, (pad, pad), mode="edge")
+    kernel = np.ones(window, dtype=float) / float(window)
+    smoothed = np.convolve(padded, kernel, mode="valid")
+    smoothed[0] = power_kw[0]
+    smoothed[-1] = power_kw[-1]
+    return smoothed
 
 
 def smooth_failed_power_curve_points(power_curve_path: Path, label: str) -> Path:
@@ -317,7 +349,7 @@ def _plot_power_curve_file(
             curve_label = label if curve_index == 1 else f"{label} {curve_index}"
             ax.plot(
                 wind_speeds,
-                _electrical_power_values(curve) / 1000.0,
+                _smooth_power_for_plot(_electrical_power_values(curve) / 1000.0),
                 color="black",
                 linestyle="--",
                 label=curve_label,
@@ -328,7 +360,7 @@ def _plot_power_curve_file(
         profile_id = curve.get("profile_id", len(ax.lines) + 1)
         ax.plot(
             wind_speeds,
-            _electrical_power_values(curve) / 1000.0,
+            _smooth_power_for_plot(_electrical_power_values(curve) / 1000.0),
             label=f"Profile {profile_id}",
             alpha=0.9,
         )
@@ -367,6 +399,11 @@ def main() -> None:
     clustered_summary_csv = resolve_path(args.summary_csv)
     power_law_summary_csv = resolve_path(args.power_law_summary_csv)
     figures_dir = resolve_path(args.figures_dir)
+    wind_speeds = (
+        np.asarray(args.wind_speeds, dtype=float)
+        if args.wind_speeds is not None
+        else None
+    )
 
     if args.compute_power_curves:
         compute_power_curves(
@@ -376,7 +413,9 @@ def main() -> None:
             wind_resource_path=power_law_wind_path,
             output_path=power_law_power_curves_path,
             profile_ids=args.power_law_profile_ids,
+            wind_speeds=wind_speeds,
             validate=args.validate,
+            verbose=args.verbose,
         )
     power_law_smoothed_path = smooth_failed_power_curve_points(
         power_law_power_curves_path,
@@ -398,7 +437,9 @@ def main() -> None:
             wind_resource_path=clustered_wind_path,
             output_path=clustered_power_curves_path,
             profile_ids=args.profile_ids,
+            wind_speeds=wind_speeds,
             validate=args.validate,
+            verbose=args.verbose,
         )
     clustered_smoothed_path = smooth_failed_power_curve_points(
         clustered_power_curves_path,

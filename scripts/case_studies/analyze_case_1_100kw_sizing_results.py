@@ -40,6 +40,18 @@ from awespa.pipeline.aep import calculate_aep
 FAILED_POWER_THRESHOLD_KW = 1.0
 RATED_POWER_WINDOW_MIN_KW = 100.0
 RATED_POWER_WINDOW_MAX_KW = 103.0
+FIGURE_WIDTH_IN = 8.0
+
+
+def kite_area_label(row_or_kite_name: dict[str, Any] | str, rows: list[dict[str, Any]] | None = None) -> str:
+    if isinstance(row_or_kite_name, dict):
+        return rf"{float(row_or_kite_name['kite_area_m2']):.0f} m$^2$"
+    if rows is None:
+        return row_or_kite_name.replace("V11.", "")
+    for row in rows:
+        if row["kite_name"] == row_or_kite_name:
+            return rf"{float(row['kite_area_m2']):.0f} m$^2$"
+    return row_or_kite_name.replace("V11.", "")
 
 
 def parse_args() -> argparse.Namespace:
@@ -196,7 +208,7 @@ def plot_power_curves(
     fig, axes = plt.subplots(
         1,
         len(generator_powers),
-        figsize=(8, 2.8),
+        figsize=(FIGURE_WIDTH_IN, 2.8),
         sharey=True,
         constrained_layout=True,
     )
@@ -226,6 +238,8 @@ def plot_power_curves(
             )
         ax.set_title(f"{generator_kw:.0f} kW")
         ax.set_xlabel(r"Wind speed (m s$^{-1}$)")
+        ax.set_xlim(left=0.0)
+        ax.set_ylim(bottom=0.0)
         ax.grid(True, alpha=0.25)
     axes[0].set_ylabel("Cycle power (kW)")
 
@@ -235,7 +249,7 @@ def plot_power_curves(
             [0],
             [0],
             color=design_color(mpl, kite_name, generator_powers[0]),
-            label=design_color_label(kite_name, generator_powers[0]),
+            label=kite_area_label(kite_name, selected_rows),
         )
         for kite_name in kite_names
     ]
@@ -264,7 +278,7 @@ def _line_plot_by_generator(rows: list[dict[str, Any]], metric: str, ylabel: str
     fig, axes = plt.subplots(
         1,
         len(generator_powers),
-        figsize=(8, 2.8),
+        figsize=(FIGURE_WIDTH_IN, 2.8),
         sharey=True,
         constrained_layout=True,
     )
@@ -282,7 +296,7 @@ def _line_plot_by_generator(rows: list[dict[str, Any]], metric: str, ylabel: str
                 [float(row[metric]) for row in kite_rows],
                 marker="o",
                 color=design_color(mpl, kite_name, generator_kw),
-                label=design_color_label(kite_name, generator_kw),
+                label=kite_area_label(kite_rows[0]),
             )
         ax.set_title(f"{generator_kw:.0f} kW")
         ax.set_xlabel("Maximum tether force (kN)")
@@ -303,7 +317,7 @@ def _heatmap_plot(rows: list[dict[str, Any]], metric: str, label: str, output: P
     fig, axes = plt.subplots(
         1,
         len(generator_powers),
-        figsize=(8, 2.8),
+        figsize=(FIGURE_WIDTH_IN, 2.8),
         sharey=True,
         constrained_layout=True,
     )
@@ -342,90 +356,137 @@ def expand_scatter_limits(ax: plt.Axes, fraction: float = 0.08) -> None:
 
 def add_nonoverlapping_scatter_labels(
     ax: plt.Axes,
-    points: list[tuple[float, float, str]],
+    points: list[tuple[float, float, str, float]],
 ) -> None:
-    offsets = [
-        (5, 5),
-        (5, -8),
-        (-22, 5),
-        (-22, -8),
-        (8, 14),
-        (-28, 14),
-        (8, -17),
-        (-28, -17),
-    ]
     used_bboxes = []
     fig = ax.figure
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+    point_bboxes = [
+        mpl.transforms.Bbox.from_bounds(
+            *(
+                ax.transData.transform((x_value, y_value))
+                - np.array([_marker_radius_points(marker_size) + 4.0] * 2)
+            ),
+            2.0 * (_marker_radius_points(marker_size) + 4.0),
+            2.0 * (_marker_radius_points(marker_size) + 4.0),
+        )
+        for x_value, y_value, _, marker_size in points
+    ]
 
-    for x_value, y_value, label in points:
+    for x_value, y_value, label, marker_size in points:
         chosen_text = None
-        for dx, dy in offsets:
+        best_text = None
+        best_score = float("inf")
+        marker_radius = _marker_radius_points(marker_size)
+        for dx, dy in _label_offsets(marker_radius):
             text = ax.annotate(
                 label,
                 xy=(x_value, y_value),
                 xytext=(dx, dy),
                 textcoords="offset points",
                 fontsize=7,
+                ha="left" if dx > 0 else "right" if dx < 0 else "center",
+                va="bottom" if dy > 0 else "top" if dy < 0 else "center",
                 bbox={
                     "boxstyle": "round,pad=0.12",
                     "facecolor": "white",
                     "edgecolor": "none",
-                    "alpha": 0.85,
+                    "alpha": 0.9,
                 },
             )
-            fig.canvas.draw()
-            bbox = text.get_window_extent(renderer=renderer).expanded(1.03, 1.15)
-            if not any(bbox.overlaps(existing) for existing in used_bboxes):
+            bbox = text.get_window_extent(renderer=renderer).expanded(1.10, 1.18)
+            label_penalty = sum(
+                _bbox_overlap_area(bbox, existing) for existing in used_bboxes
+            )
+            point_penalty = sum(
+                _bbox_overlap_area(bbox, point_bbox) for point_bbox in point_bboxes
+            )
+            if label_penalty == 0.0 and point_penalty == 0.0:
                 chosen_text = text
+                if best_text is not None:
+                    best_text.remove()
                 used_bboxes.append(bbox)
                 break
-            text.remove()
+            score = 1000.0 * label_penalty + 100.0 * point_penalty + 0.01 * (
+                dx * dx + dy * dy
+            )
+            if score < best_score:
+                if best_text is not None:
+                    best_text.remove()
+                best_text = text
+                best_score = score
+            else:
+                text.remove()
 
         if chosen_text is None:
-            text = ax.annotate(
-                label,
-                xy=(x_value, y_value),
-                xytext=(5, 5),
-                textcoords="offset points",
-                fontsize=7,
-                bbox={
-                    "boxstyle": "round,pad=0.12",
-                    "facecolor": "white",
-                    "edgecolor": "none",
-                    "alpha": 0.85,
-                },
+            if best_text is None:
+                continue
+            used_bboxes.append(
+                best_text.get_window_extent(renderer=renderer).expanded(1.10, 1.18)
             )
-            fig.canvas.draw()
-            used_bboxes.append(text.get_window_extent(renderer=renderer))
+
+
+def _marker_radius_points(marker_size: float) -> float:
+    return max(4.5, math.sqrt(marker_size) * 0.62)
+
+
+def _label_offsets(marker_radius: float) -> list[tuple[float, float]]:
+    offsets: list[tuple[float, float]] = []
+    for distance in (
+        marker_radius + 2.5,
+        marker_radius + 5.0,
+        marker_radius + 8.0,
+        marker_radius + 11.0,
+    ):
+        offsets.extend(
+            [
+                (distance, distance),
+                (-distance, distance),
+                (distance, -distance),
+                (-distance, -distance),
+                (distance + 3.0, 0),
+                (-(distance + 3.0), 0),
+                (0, distance + 3.0),
+                (0, -(distance + 3.0)),
+            ]
+        )
+    return offsets
+
+
+def _bbox_overlap_area(first: mpl.transforms.Bbox, second: mpl.transforms.Bbox) -> float:
+    x_overlap = max(0.0, min(first.x1, second.x1) - max(first.x0, second.x0))
+    y_overlap = max(0.0, min(first.y1, second.y1) - max(first.y0, second.y0))
+    return float(x_overlap * y_overlap)
 
 
 def plot_scatter(rows: list[dict[str, Any]], output: Path) -> None:
     apply_case_study_plot_style(mpl)
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(8, 4.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH_IN, 4.8), constrained_layout=True)
 
     marker_by_tether = {60.0: "o", 70.0: "s", 80.0: "^"}
-    size_by_generator = {160.0: 42, 170.0: 74, 180.0: 108}
-    label_points: list[tuple[float, float, str]] = []
-
+    size_by_generator = {160.0: 36, 170.0: 90, 180.0: 170}
+    label_points: list[tuple[float, float, str, float]] = []
     for row in rows:
         x_value = float(row["capacity_factor_percent"])
         y_value = float(row["aep_mwh"])
         tether = float(row["max_tether_force_kN"])
         generator = float(row["generator_power_kW"])
+        marker_size = size_by_generator.get(generator, 70)
         ax.scatter(
             x_value,
             y_value,
-            s=size_by_generator.get(generator, 70),
+            s=marker_size,
             marker=marker_by_tether.get(tether, "o"),
             color=design_color(mpl, row["kite_name"], generator),
             edgecolor="black",
             linewidth=0.5,
             alpha=0.9,
         )
-        label_points.append((x_value, y_value, f"{float(row['rated_power_kW']):.1f}"))
+        label_points.append(
+            (x_value, y_value, f"{float(row['rated_power_kW']):.1f}", marker_size)
+        )
 
     ax.set_xlabel("Capacity factor (%)")
     ax.set_ylabel("AEP (MWh)")
@@ -441,7 +502,7 @@ def plot_scatter(rows: list[dict[str, Any]], output: Path) -> None:
             marker="o",
             linestyle="",
             color=design_color(mpl, kite_name, 170.0),
-            label=design_color_label(kite_name, 170.0),
+            label=kite_area_label(kite_name, rows),
         )
         for kite_name in sorted({row["kite_name"] for row in rows})
     ]
@@ -451,7 +512,11 @@ def plot_scatter(rows: list[dict[str, Any]], output: Path) -> None:
             [0],
             marker=marker_by_tether.get(force, "o"),
             linestyle="",
-            color="0.2",
+            color="black",
+            markerfacecolor="white",
+            markeredgecolor="black",
+            markeredgewidth=1.3,
+            markersize=7.5,
             label=f"{force:g} kN",
         )
         for force in sorted({float(row["max_tether_force_kN"]) for row in rows})

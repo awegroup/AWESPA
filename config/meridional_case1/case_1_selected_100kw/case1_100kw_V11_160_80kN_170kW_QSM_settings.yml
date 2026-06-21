@@ -1,0 +1,106 @@
+aerodynamics:
+  kite_lift_coefficient_reel_out: 0.8
+  kite_drag_coefficient_reel_out: 0.16
+  kite_lift_coefficient_reel_in: 0.3
+  kite_drag_coefficient_reel_in: 0.12
+  tether_drag_coefficient: 1.1
+optimization:
+  wind_speeds:
+    cut_in: 3.0
+    cut_out: 25.0
+    n_points: 45
+  optimizer:
+    optimize_variables:
+      reeling_speed_traction: true
+      reeling_speed_retraction: true
+      fraction_tether_length_traction_end: true
+      fraction_tether_length_retraction_end: true
+      elevation_angle_traction: true
+      elevation_angle_end_trans_rori: true
+    opt_phase_timestep:
+      retraction: 1.5
+      transition_riro: 0.05
+      traction: 2.5
+      transition_rori: 0.05
+    max_iterations: 40
+    ftol: 0.001
+    eps: 0.02
+    finite_difference_steps:
+      reeling_speed: 0.03
+      tether_fraction: 0.005
+      elevation_angle: 0.25
+    x0:
+    - 2
+    - -2
+    - 0.65
+    - 0.9
+    - 30.0
+    - 50.0
+    scaling:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 30
+    - 30
+  bounds:
+    reeling_speed_traction_min: 0.01
+    reeling_speed_traction_max: 15.0
+    reeling_speed_retraction_min: -15.0
+    reeling_speed_retraction_max: -0.01
+    fraction_tether_length_traction_end_min: 0.5
+    fraction_tether_length_traction_end_max: 0.95
+    fraction_tether_length_retraction_end_min: 0.2
+    fraction_tether_length_retraction_end_max: 0.8
+    elevation_angle_traction_min: 20.0
+    elevation_angle_traction_max: 80.0
+    elevation_angle_end_trans_rori_min: 30.0
+    elevation_angle_end_trans_rori_max: 100.0
+  constraints:
+    min_tether_length_fraction_difference: 0.1
+    max_difference_elevation_angle_steps: 5.0
+cycle:
+  minimum_tether_force: 6000.0
+  minimum_height: 100.0
+  elevation_angle_traction:
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  tether_length_end_traction: 0.95
+  tether_length_end_retraction: 0.35
+  include_transition_energy: true
+  elevation_angle_end_trans_rori: 50.0
+retraction:
+  control:
+  - reeling_speed
+  - -2.0
+  time_step: 0.25
+  azimuth_angle: 0.0
+  course_angle: 180.0
+transition_riro:
+  control:
+  - reeling_speed
+  - 0
+  time_step: 0.05
+  azimuth_angle: 0.0
+  course_angle: 0.0
+transition_rori:
+  control:
+  - reeling_speed
+  - 0
+  time_step: 0.05
+  azimuth_angle: 0.0
+  course_angle: 180.0
+traction:
+  control:
+  - reeling_speed
+  - 2.0
+  time_step: 0.25
+  azimuth_angle: 11.5
+  course_angle: 93.0
+steady_state:
+  max_iterations: 250
+  convergence_tolerance: 0.001
+phase_solver:
+  max_time_points: 5000
