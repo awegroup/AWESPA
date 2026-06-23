@@ -240,7 +240,7 @@ def plot_power_curves(
         ax.set_title(f"{generator_kw:.0f} kW")
         ax.set_xlabel(r"Wind speed (m s$^{-1}$)")
         ax.set_xlim(left=0.0)
-        ax.set_ylim(bottom=0.0)
+        ax.set_ylim(bottom=0.0, top=1.15 * max(float(row["rated_power_kW"]) for row in generator_rows))
         ax.grid(True, alpha=0.25)
     axes[0].set_ylabel("Cycle power (kW)")
 
@@ -302,6 +302,7 @@ def _line_plot_by_generator(rows: list[dict[str, Any]], metric: str, ylabel: str
         ax.set_title(f"{generator_kw:.0f} kW")
         ax.set_xlabel("Maximum tether force (kN)")
         ax.grid(True, alpha=0.25)
+        ax.set_ylim(bottom=0.0, top=1.15 * max(float(row["rated_power_kW"]) for row in generator_rows))
     axes[0].set_ylabel(ylabel)
     axes[0].legend(loc="best", title="Kite size")
     fig.savefig(output)

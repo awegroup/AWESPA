@@ -495,5 +495,5 @@ def group_rows(rows: list[dict[str, Any]], key: str) -> dict[Any, list[dict[str,
 
 def tether_force_linestyle(force_kn: float) -> str:
     force_values = sorted(set(TETHER_FORCES_KN + [force_kn]))
-    styles = ["-", "--", "-.", ":", (0, (5, 1)), (0, (3, 1, 1, 1))]
+    styles = ["-", "--", ":", (0, (5, 1)), (0, (3, 1, 1, 1))]
     return styles[force_values.index(force_kn) % len(styles)]
