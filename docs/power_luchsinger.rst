@@ -79,7 +79,7 @@ Usage example
 
    model = LuchsingerPowerModel()
    model.load_configuration(
-       system_path=Path("config/example/kitepower V3_20.yml"),
+       system_path=Path("config/example/kitepower V3_25.yml"),
        simulation_settings_path=Path("config/example/luchsinger_settings.yml"),
        wind_resource_path=Path("results/example/wind_resource.yml"),
    )
