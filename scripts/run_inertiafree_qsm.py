@@ -22,7 +22,7 @@ def main():
     """Run InertiaFree-QSM model and export power curves."""
     # ---- paths -----------------------------------------------------------
     configDir = PROJECT_ROOT / "config" / "example"
-    systemPath = configDir / "tudelft V3_25.yml"
+    systemPath = configDir / "tudelft_V3_25.yml"
     simulationSettingsPath = configDir / "inertiafree-qsm_settings.yml"
     windResourcePath = configDir / "wind_resource.yml"
 

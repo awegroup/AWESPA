@@ -22,7 +22,7 @@ def main():
     """Run Luchsinger model and export power curves."""
     # ---- paths -----------------------------------------------    ------------
     configDir = PROJECT_ROOT / "config"
-    systemPath = configDir / "example" / "tudelft V3_25.yml"
+    systemPath = configDir / "example" / "tudelft_V3_25.yml"
     simulationSettingsPath = configDir /"example" / "luchsinger_settings.yml"
     windResourcePath = configDir / "example" / "wind_resource.yml"
 

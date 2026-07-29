@@ -165,7 +165,7 @@ Complete pipeline example
    # --- Step 2: Power curve generation ---
    power_model = LuchsingerPowerModel()
    power_model.load_configuration(
-      system_path=CONFIG / "tudelft V3_25.yml",
+      system_path=CONFIG / "tudelft_V3_25.yml",
       simulation_settings_path=CONFIG / "luchsinger_settings.yml",
       wind_resource_path=RESULTS / "wind_resource.yml",
    )
