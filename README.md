@@ -212,7 +212,7 @@ See [README_dev.md](README_dev.md) for detailed development guidelines.
 
 ## License
 
-MIT License — Copyright (c) 2024 Airborne Wind Energy Research Group, TU Delft
+MIT License — Copyright (c) 2026 Airborne Wind Energy Research Group, TU Delft
 
 Technische Universiteit Delft hereby disclaims all copyright interest in the program "AWESPA" (Airborne Wind Energy System Performance Assessment Toolchain) written by the Author(s).
 
